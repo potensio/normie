@@ -6,6 +6,7 @@
  */
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
+import { authApi } from '@/lib/api';
 
 /**
  * Login mutation hook
@@ -20,13 +21,12 @@ export function useLogin() {
 
   return useMutation({
     mutationFn: async ({ email, password }: { email: string; password: string }) => {
-      if (!window.authAPI) throw new Error('Auth API not available');
-      await window.authAPI.login(email, password);
+      await authApi.login(email, password);
     },
     onSuccess: () => {
-      setUser(window.authAPI?.getUser() ?? null);
-      setCurrentWorkspace(window.authAPI?.getCurrentWorkspace() ?? null);
-      setWorkspaces(window.authAPI?.getUserWorkspaces() ?? []);
+      setUser(authApi.getUser());
+      setCurrentWorkspace(authApi.getCurrentWorkspace());
+      setWorkspaces(authApi.getWorkspaces());
       setError(null);
       queryClient.invalidateQueries({ queryKey: ['workspaces'] });
       queryClient.invalidateQueries({ queryKey: ['chats'] });
@@ -50,13 +50,12 @@ export function useRegister() {
 
   return useMutation({
     mutationFn: async ({ email, password, displayName }: { email: string; password: string; displayName?: string }) => {
-      if (!window.authAPI) throw new Error('Auth API not available');
-      await window.authAPI.register(email, password, displayName);
+      await authApi.register(email, password, displayName);
     },
     onSuccess: () => {
-      setUser(window.authAPI?.getUser() ?? null);
-      setCurrentWorkspace(window.authAPI?.getCurrentWorkspace() ?? null);
-      setWorkspaces(window.authAPI?.getUserWorkspaces() ?? []);
+      setUser(authApi.getUser());
+      setCurrentWorkspace(authApi.getCurrentWorkspace());
+      setWorkspaces(authApi.getWorkspaces());
       setError(null);
       queryClient.invalidateQueries({ queryKey: ['workspaces'] });
       queryClient.invalidateQueries({ queryKey: ['chats'] });
@@ -80,8 +79,7 @@ export function useLogout() {
 
   return useMutation({
     mutationFn: async () => {
-      if (!window.authAPI) throw new Error('Auth API not available');
-      await window.authAPI.logout();
+      await authApi.logout();
     },
     onSuccess: () => {
       setUser(null);

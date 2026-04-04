@@ -5,6 +5,7 @@
  */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { Workspace } from '@normie/types';
+import { authApi } from '@/lib/api';
 
 // ============================================
 // Query Keys
@@ -28,19 +29,8 @@ export const workspaceKeys = {
 export function useWorkspaces() {
   return useQuery({
     queryKey: workspaceKeys.list(),
-    queryFn: async (): Promise<Workspace[]> => {
-      if (!window.authAPI) return [];
-      
-      const response = await fetch('http://localhost:3001/api/workspaces', {
-        credentials: 'include',
-      });
-      
-      if (!response.ok) throw new Error('Failed to fetch workspaces');
-      
-      const data = await response.json();
-      return data.workspaces;
-    },
-    initialData: () => window.authAPI?.getUserWorkspaces() || [],
+    queryFn: () => authApi.getWorkspaces(),
+    initialData: () => authApi.getWorkspaces(),
   });
 }
 
@@ -60,12 +50,11 @@ export function useCreateWorkspace() {
   
   return useMutation({
     mutationFn: async ({ name, description }: { name: string; description?: string }) => {
-      if (!window.authAPI) throw new Error('Auth API not available');
-      return await window.authAPI.createWorkspace(name, description);
+      return await authApi.createWorkspace(name, description);
     },
     onSuccess: (newWorkspace) => {
       queryClient.invalidateQueries({ queryKey: workspaceKeys.list() });
-      window.authAPI?.switchWorkspace(newWorkspace.id);
+      authApi.switchWorkspace(newWorkspace.id);
     },
   });
 }

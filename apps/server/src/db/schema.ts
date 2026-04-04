@@ -188,6 +188,29 @@ export const dailyNotes = pgTable('daily_notes', {
 ]);
 
 // ============================================
+// WORKSPACE INTEGRATIONS (Composio connections)
+// ============================================
+export const workspaceIntegrations = pgTable('workspace_integrations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workspaceId: uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  toolkitSlug: varchar('toolkit_slug', { length: 100 }).notNull(), // e.g., 'gmail', 'slack', 'github'
+  connectedAccountId: varchar('connected_account_id', { length: 100 }).notNull(), // Composio's connected account ID
+  connectionStatus: varchar('connection_status', { length: 20 }).default('ACTIVE'), // ACTIVE, EXPIRED, FAILED, PENDING
+  metadata: jsonb('metadata').default({}).$type<{
+    entityId?: string;
+    redirectUrl?: string;
+    connectedAt?: string;
+    [key: string]: unknown;
+  }>(),
+  createdBy: uuid('created_by').notNull().references(() => users.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull()
+}, (table) => [
+  index('idx_workspace_integrations_workspace').on(table.workspaceId),
+  unique('unique_workspace_toolkit').on(table.workspaceId, table.toolkitSlug)
+]);
+
+// ============================================
 // WORKSPACE INVITES
 // ============================================
 export const workspaceInvites = pgTable('workspace_invites', {
@@ -234,7 +257,19 @@ export const workspacesRelations = relations(workspaces, ({ many, one }) => ({
   chats: many(chats),
   memories: many(memories),
   dailyNotes: many(dailyNotes),
-  invites: many(workspaceInvites)
+  invites: many(workspaceInvites),
+  integrations: many(workspaceIntegrations)
+}));
+
+export const workspaceIntegrationsRelations = relations(workspaceIntegrations, ({ one }) => ({
+  workspace: one(workspaces, {
+    fields: [workspaceIntegrations.workspaceId],
+    references: [workspaces.id]
+  }),
+  createdByUser: one(users, {
+    fields: [workspaceIntegrations.createdBy],
+    references: [users.id]
+  })
 }));
 
 export const chatsRelations = relations(chats, ({ many, one }) => ({

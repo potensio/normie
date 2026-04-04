@@ -21,6 +21,7 @@ import workspaceRoutes from './routes/workspaces.js';
 import chatRoutes from './routes/chats.js';
 import apiKeyRoutes from './routes/api-keys.js';
 import memoryRoutes from './routes/memories.js';
+import integrationRoutes from './routes/integrations.js';
 import * as schema from './db/schema.js';
 import { eq } from 'drizzle-orm';
 import { buildFullContext } from './services/context-builder.js';
@@ -67,10 +68,11 @@ app.get('/api/health', async (_req, res) => {
       providers: getAvailableProviders()
     });
   } catch (error) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     res.status(503).json({
       status: 'error',
       database: 'disconnected',
-      error: error.message
+      error: (error as any)?.message || 'Unknown error'
     });
   }
 });
@@ -83,6 +85,7 @@ app.use('/api/workspaces', workspaceRoutes);
 app.use('/api/chats', chatRoutes);
 app.use('/api/api-keys', apiKeyRoutes);
 app.use('/api/memories', memoryRoutes);
+app.use('/api/integrations', integrationRoutes);
 
 // ============================================
 // LEGACY CHAT ENDPOINT (for backward compatibility)
@@ -139,39 +142,14 @@ app.post('/api/chat', async (req, res) => {
   });
 
   try {
-    // Get or create Composio session for this user
-    const { composioSessions, defaultComposioSession, updateOpencodeConfig } = await getComposioSession(userId);
-    let composioSession = composioSessions.get(userId) || defaultComposioSession;
-
-    if (!composioSession) {
-      console.log('[COMPOSIO] Creating new session for user:', userId);
-      res.write(`data: ${JSON.stringify({ type: 'status', message: 'Initializing session...' })}\n\n`);
-      const composio = new Composio();
-      composioSession = await composio.create(userId);
-      composioSessions.set(userId, composioSession);
-      console.log('[COMPOSIO] Session created with MCP URL:', composioSession.mcp.url);
-
-      updateOpencodeConfig(composioSession.mcp.url, composioSession.mcp.headers);
-      console.log('[OPENCODE] Updated opencode.json with MCP config');
-    }
+    // Get Composio session helpers
+    const { getOrCreateWorkspaceSession, defaultComposioSession } = await getComposioSession(userId);
 
     // Get the provider instance
     const provider = getProvider(providerName);
 
-    // Build MCP servers config - passed to provider
-    const mcpServers = {
-      composio: {
-        type: 'http',
-        url: composioSession.mcp.url,
-        headers: composioSession.mcp.headers
-      }
-    };
-
-    console.log('[CHAT] Using provider:', provider.name);
-    console.log('[CHAT] All stored sessions:', Array.from(provider.sessions.entries()));
-
     // Helper to check if string is valid UUID
-    const isValidUUID = (str) => {
+    const isValidUUID = (str: string) => {
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       return uuidRegex.test(str);
     };
@@ -180,8 +158,8 @@ app.post('/api/chat', async (req, res) => {
     const db = getDb();
     let resolvedWorkspaceId = requestWorkspaceId;
     let dbChatId = chatId;  // Track the actual DB chat ID
-    let existingSessionId = null;
-    let existingSessionProvider = null;
+    let existingSessionId: string | undefined = undefined;
+    let existingSessionProvider: string | null = null;
     
     if (chatId) {
       // Check if chatId is a valid UUID - if not, we need to create a new chat
@@ -279,8 +257,8 @@ app.post('/api/chat', async (req, res) => {
           console.log('[CHAT] Created chat in DB:', chatId);
         } else {
           resolvedWorkspaceId = existingChat.workspaceId;
-          // Load existing session from DB
-          existingSessionId = existingChat.sessionId;
+          // Load existing session from DB (convert null to undefined)
+          existingSessionId = existingChat.sessionId ?? undefined;
           existingSessionProvider = existingChat.sessionProvider;
           console.log('[CHAT] Found existing chat, workspace:', resolvedWorkspaceId);
           if (existingSessionId) {
@@ -307,6 +285,36 @@ app.post('/api/chat', async (req, res) => {
       workspaceId: contextResult.workspaceId
     });
 
+    // Get or create workspace-scoped Composio session
+    // This ensures integrations are isolated per workspace
+    let mcpServers: Record<string, { type: string; url: string; headers: Record<string, string> }> = {};
+    
+    if (resolvedWorkspaceId) {
+      try {
+        const workspaceSession = await getOrCreateWorkspaceSession(resolvedWorkspaceId, userId);
+        if (workspaceSession) {
+          mcpServers = {
+            composio: {
+              type: 'http',
+              url: workspaceSession.mcp.url,
+              headers: workspaceSession.mcp.headers
+            }
+          };
+          console.log('[CHAT] Using workspace-scoped Composio session for:', resolvedWorkspaceId);
+        }
+      } catch (sessionErr) {
+        console.error('[CHAT] Failed to create workspace session:', (sessionErr as Error).message);
+      }
+    } else if (defaultComposioSession) {
+      mcpServers = {
+        composio: {
+          type: 'http',
+          url: defaultComposioSession.mcp.url,
+          headers: defaultComposioSession.mcp.headers
+        }
+      };
+    }
+
     // Save user message to database (for conversation history)
     if (dbChatId) {
       try {
@@ -330,12 +338,12 @@ app.post('/api/chat', async (req, res) => {
       for await (const chunk of provider.query({
         prompt: message,  // Original message for providers that don't support history
         messages: contextResult.messages,  // Full conversation history
-        systemPrompt: contextResult.systemPrompt,  // System context from workspace
-        chatId: dbChatId,  // Use the proper UUID for session management
+        systemPrompt: contextResult.systemPrompt ?? undefined,  // System context from workspace (convert null to undefined)
+        chatId: dbChatId ?? undefined,  // Use the proper UUID for session management
         sessionId: existingSessionId,  // Pass existing session from DB (for resumption)
         userId,
         mcpServers,
-        model,
+        model: model ?? undefined,  // Convert null to undefined
         allowedTools: ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep', 'WebSearch', 'WebFetch', 'TodoWrite', 'Skill'],
         maxTurns: 100
       })) {
@@ -367,10 +375,10 @@ app.post('/api/chat', async (req, res) => {
         const data = `data: ${JSON.stringify(chunk)}\n\n`;
         res.write(data);
       }
-    } catch (streamError) {
+    } catch (streamError: unknown) {
       console.error('[CHAT] Stream error during iteration:', streamError);
       if (!res.writableEnded) {
-        res.write(`data: ${JSON.stringify({ type: 'error', message: streamError.message })}\n\n`);
+        res.write(`data: ${JSON.stringify({ type: 'error', message: (streamError as Error).message })}\n\n`);
       }
     }
 
@@ -393,10 +401,10 @@ app.post('/api/chat', async (req, res) => {
       res.end();
     }
     console.log('[CHAT] Stream completed');
-  } catch (error) {
+  } catch (error: unknown) {
     clearInterval(heartbeatInterval);
     console.error('[CHAT] Error:', error);
-    res.write(`data: ${JSON.stringify({ type: 'error', message: error.message })}\n\n`);
+    res.write(`data: ${JSON.stringify({ type: 'error', message: (error as Error).message })}\n\n`);
     res.end();
   }
 });
@@ -422,9 +430,9 @@ app.post('/api/abort', (req, res) => {
       console.log('[ABORT] No active query found for chatId:', chatId);
       res.json({ success: false, message: 'No active query to abort' });
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[ABORT] Error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: (error as Error).message });
   }
 });
 
@@ -440,27 +448,80 @@ app.get('/api/providers', (_req, res) => {
 // DATABASE INITIALIZATION
 // ============================================
 
-let composioSessions = new Map();
-let defaultComposioSession = null;
+// Composio sessions keyed by workspace ID (for isolation)
+const composioSessions = new Map<string, { mcp: { url: string; headers: Record<string, string> } }>();
+let defaultComposioSession: { mcp: { url: string; headers: Record<string, string> } } | null = null;
+let composioClient: Composio | null = null;
+
+function getComposioClient(): Composio {
+  if (!composioClient) {
+    composioClient = new Composio();
+  }
+  return composioClient;
+}
 
 async function initializeComposioSession() {
-  const defaultUserId = 'default-user';
-  console.log('[COMPOSIO] Pre-initializing session for:', defaultUserId);
+  console.log('[COMPOSIO] Pre-initializing default session...');
   try {
-    const composio = new Composio();
-    defaultComposioSession = await composio.create(defaultUserId);
-    composioSessions.set(defaultUserId, defaultComposioSession);
-    console.log('[COMPOSIO] Session ready with MCP URL:', defaultComposioSession.mcp.url);
+    const composio = getComposioClient();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const session = await composio.create('default-user') as any;
+    defaultComposioSession = {
+      mcp: {
+        url: session.mcp?.url || '',
+        headers: session.mcp?.headers || {}
+      }
+    };
+    console.log('[COMPOSIO] Default session ready with MCP URL:', defaultComposioSession.mcp.url);
 
     // Update opencode.json with the MCP config
     updateOpencodeConfig(defaultComposioSession.mcp.url, defaultComposioSession.mcp.headers);
     console.log('[OPENCODE] Updated opencode.json with MCP config');
   } catch (error) {
-    console.error('[COMPOSIO] Failed to pre-initialize session:', error.message);
+    console.error('[COMPOSIO] Failed to pre-initialize session:', (error as Error).message);
   }
 }
 
-function updateOpencodeConfig(mcpUrl, mcpHeaders) {
+/**
+ * Get or create a Composio session for a specific workspace
+ * This ensures integrations are isolated per workspace
+ */
+async function getOrCreateWorkspaceSession(workspaceId: string, userId: string) {
+  // Check for cached session
+  const cached = composioSessions.get(workspaceId);
+  if (cached) {
+    return cached;
+  }
+  
+  // Create workspace-specific entity ID for isolation
+  const entityId = `ws_${workspaceId}_user_${userId}`;
+  console.log('[COMPOSIO] Creating session for entity:', entityId);
+  
+  try {
+    const composio = getComposioClient();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const session = await composio.create(entityId, { manageConnections: true }) as any;
+    
+    const workspaceSession = {
+      mcp: {
+        url: session.mcp?.url || '',
+        headers: session.mcp?.headers || {}
+      }
+    };
+    
+    // Cache the session
+    composioSessions.set(workspaceId, workspaceSession);
+    console.log('[COMPOSIO] Created workspace session, MCP URL:', workspaceSession.mcp.url);
+    
+    return workspaceSession;
+  } catch (error) {
+    console.error('[COMPOSIO] Failed to create workspace session:', (error as Error).message);
+    // Fallback to default session
+    return defaultComposioSession;
+  }
+}
+
+function updateOpencodeConfig(mcpUrl: string, mcpHeaders: Record<string, string>) {
   const opencodeConfigPath = path.join(__dirname, 'opencode.json');
   const config = {
     mcp: {
@@ -474,8 +535,8 @@ function updateOpencodeConfig(mcpUrl, mcpHeaders) {
   fs.writeFileSync(opencodeConfigPath, JSON.stringify(config, null, 2));
 }
 
-async function getComposioSession(userId) {
-  return { composioSessions, defaultComposioSession, updateOpencodeConfig };
+async function getComposioSession(_userId: string) {
+  return { composioSessions, defaultComposioSession, updateOpencodeConfig, getOrCreateWorkspaceSession };
 }
 
 async function startServer() {

@@ -6,6 +6,7 @@
 import { useState, useRef, useCallback } from 'react';
 import type { Message, ToolCall, Todo, InlineToolCall, Provider } from '@normie/types';
 import { generateId } from '@normie/utils';
+import { chatApi } from '@/lib/api';
 
 interface UseChatStreamReturn {
   messages: Message[];
@@ -25,6 +26,7 @@ interface UseChatStreamReturn {
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
   setToolCalls: React.Dispatch<React.SetStateAction<ToolCall[]>>;
   setTodos: React.Dispatch<React.SetStateAction<Todo[]>>;
+  loadMessages: (chat: { messages: Message[]; todos?: Todo[]; toolCalls?: ToolCall[] }) => void;
   reset: () => void;
 }
 
@@ -45,10 +47,16 @@ export function useChatStream(): UseChatStreamReturn {
     }
   }, []);
 
+  const loadMessages = useCallback((chat: { messages: Message[]; todos?: Todo[]; toolCalls?: ToolCall[] }) => {
+    setMessages(chat.messages);
+    setTodos(chat.todos || []);
+    setToolCalls(chat.toolCalls || []);
+  }, []);
+
   const stopStreaming = useCallback(async (chatId: string, provider: Provider) => {
-    window.electronAPI.abortCurrentRequest();
+    window.electronAPI?.abortCurrentRequest();
     if (chatId) {
-      await window.electronAPI.stopQuery(chatId, provider);
+      await chatApi.abort(chatId, provider);
     }
     setIsStreaming(false);
   }, []);
@@ -92,16 +100,15 @@ export function useChatStream(): UseChatStreamReturn {
       setIsStreaming(true);
 
       try {
-        const response = await window.electronAPI.sendMessage(
+        const reader = await chatApi.send({
           content,
           chatId,
           provider,
           model,
           workspaceId,
           userId,
-        );
+        });
 
-        const reader = await response.getReader();
         let fullContent = '';
         let fullReasoning = '';
         const pendingToolCalls = new Map<string, string>();
@@ -111,7 +118,7 @@ export function useChatStream(): UseChatStreamReturn {
           if (done) break;
           if (!value) continue;
 
-          // Parse SSE data
+          // Parse SSE data (value is already a string)
           const lines = value.split('\n');
           for (const line of lines) {
             if (line.startsWith(':')) continue;
@@ -286,6 +293,7 @@ export function useChatStream(): UseChatStreamReturn {
     setMessages,
     setToolCalls,
     setTodos,
+    loadMessages,
     reset,
   };
 }

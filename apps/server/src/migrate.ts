@@ -8,8 +8,19 @@ import dotenv from 'dotenv';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Load env first
-dotenv.config({ path: path.join(__dirname, '..', '.env') });
+// Load env first - check multiple locations
+const envPaths = [
+  path.join(__dirname, '..', '..', '..', '.env'),  // monorepo root
+  path.join(__dirname, '..', '.env'),  // server package
+];
+
+for (const envPath of envPaths) {
+  if (fs.existsSync(envPath)) {
+    console.log('[MIGRATE] Loading env from:', envPath);
+    dotenv.config({ path: envPath });
+    break;
+  }
+}
 
 async function migrate() {
   const pool = new Pool({
@@ -67,9 +78,9 @@ async function migrate() {
         WITH (lists = 100)
       `);
       console.log('[MIGRATE] Vector index ready');
-    } catch (err) {
-      if (!err.message.includes('already exists')) {
-        console.warn('[MIGRATE] Could not create vector index:', err.message);
+    } catch (err: unknown) {
+      if (!(err as Error).message.includes('already exists')) {
+        console.warn('[MIGRATE] Could not create vector index:', (err as Error).message);
       }
     }
     
@@ -84,8 +95,8 @@ async function migrate() {
     
     console.log('[MIGRATE] Tables:', rows.map(r => r.table_name).join(', '));
     
-  } catch (error) {
-    console.error('[MIGRATE] Error:', error.message);
+  } catch (error: unknown) {
+    console.error('[MIGRATE] Error:', (error as Error).message);
     throw error;
   } finally {
     await pool.end();

@@ -4,7 +4,9 @@
  * All chat operations grouped in one file.
  */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import type { Chat, Provider } from '@normie/types';
+import type { Chat } from '@normie/types';
+import { transformApiChatLite } from '@normie/utils';
+import { chatApi } from '@/lib/api';
 
 // ============================================
 // Query Keys
@@ -15,26 +17,6 @@ export const chatKeys = {
   list: (workspaceId: string) => [...chatKeys.all, 'list', workspaceId] as const,
   detail: (chatId: string) => [...chatKeys.all, 'detail', chatId] as const,
 };
-
-// ============================================
-// Helpers
-// ============================================
-
-function transformApiChat(chat: Record<string, unknown>): Chat {
-  return {
-    id: String(chat.id),
-    title: String(chat.title || 'New chat'),
-    provider: String(chat.provider || 'claude') as Provider,
-    model: String(chat.model || ''),
-    sessionId: chat.sessionId ? String(chat.sessionId) : undefined,
-    updatedAt: chat.updatedAt
-      ? new Date(chat.updatedAt as string).getTime()
-      : Date.now(),
-    messages: (chat.messages as Chat['messages']) || [],
-    todos: chat.todos as Chat['todos'],
-    toolCalls: chat.toolCalls as Chat['toolCalls'],
-  };
-}
 
 // ============================================
 // Queries
@@ -50,24 +32,14 @@ export function useChats(workspaceId: string | null | undefined) {
   return useQuery({
     queryKey: chatKeys.list(workspaceId!),
     queryFn: async (): Promise<Chat[]> => {
-      if (!workspaceId || !window.authAPI) return [];
+      if (!workspaceId) return [];
       
-      const chatsData = await window.authAPI.getChats(workspaceId);
+      const chatsData = await chatApi.list(workspaceId);
       
-      const transformedChats = chatsData.map((chat: Record<string, unknown>) => ({
-        id: String(chat.id),
-        title: String(chat.title || 'New chat'),
-        provider: String(chat.provider || 'claude') as Provider,
-        model: String(chat.model || ''),
-        sessionId: chat.sessionId ? String(chat.sessionId) : undefined,
-        updatedAt: chat.updatedAt
-          ? new Date(chat.updatedAt as string).getTime()
-          : Date.now(),
-        messages: [], // Messages loaded separately
-      }));
-      
-      // Sort by updated time (most recent first)
-      return transformedChats.sort((a, b) => b.updatedAt - a.updatedAt);
+      // Transform and sort by updated time (most recent first)
+      return chatsData
+        .map(transformApiChatLite)
+        .sort((a, b) => b.updatedAt - a.updatedAt);
     },
     enabled: !!workspaceId,
   });
@@ -84,12 +56,10 @@ export function useChatDetail(chatId: string | null | undefined) {
   return useQuery({
     queryKey: chatKeys.detail(chatId!),
     queryFn: async (): Promise<Chat | null> => {
-      if (!chatId || !window.authAPI) return null;
+      if (!chatId) return null;
       
-      const chatData = await window.authAPI.getChat(chatId);
-      if (!chatData) return null;
-      
-      return transformApiChat(chatData as Record<string, unknown>);
+      const chatData = await chatApi.get(chatId);
+      return transformApiChatLite(chatData);
     },
     enabled: !!chatId,
   });
@@ -111,8 +81,7 @@ export function useDeleteChat() {
   
   return useMutation({
     mutationFn: async (chatId: string) => {
-      if (!window.authAPI) throw new Error('Auth API not available');
-      await window.authAPI.deleteChat(chatId);
+      await chatApi.delete(chatId);
       return chatId;
     },
     onSuccess: (chatId) => {

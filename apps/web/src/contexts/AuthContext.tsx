@@ -1,5 +1,11 @@
+/**
+ * AuthContext - Holds auth state only
+ * 
+ * This context is a state container. All mutations are in hooks/useAuth.ts.
+ */
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import type { User, Workspace } from '@normie/types';
+import { authApi } from '@/lib/api';
 
 interface AuthContextType {
   // State
@@ -38,18 +44,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Initialize auth on mount
   useEffect(() => {
     const init = async () => {
-      if (window.authAPI) {
-        try {
-          const loggedIn = await window.authAPI.initAuth();
-          if (loggedIn) {
-            setUser(window.authAPI.getUser());
-            setCurrentWorkspace(window.authAPI.getCurrentWorkspace());
-            setWorkspaces(window.authAPI.getUserWorkspaces() || []);
-          }
-        } catch (err) {
-          console.error('[AuthContext] Init error:', err);
-          // Session expired or invalid - stay logged out
+      try {
+        const loggedIn = await authApi.init();
+        if (loggedIn) {
+          setUser(authApi.getUser());
+          setCurrentWorkspace(authApi.getCurrentWorkspace());
+          setWorkspaces(authApi.getWorkspaces());
         }
+      } catch (err) {
+        console.error('[AuthContext] Init error:', err);
+        // Session expired or invalid - stay logged out
       }
       setIsLoading(false);
     };
@@ -57,23 +61,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const createWorkspace = useCallback(async (name: string, description?: string) => {
-    if (!window.authAPI) throw new Error('Auth API not available');
-    
-    const workspace = await window.authAPI.createWorkspace(name, description);
+    const workspace = await authApi.createWorkspace(name, description);
     setWorkspaces(prev => [...prev, workspace]);
     return workspace;
   }, []);
 
   const switchWorkspace = useCallback((workspaceId: string) => {
-    if (!window.authAPI) return;
-    window.authAPI.switchWorkspace(workspaceId);
-    setCurrentWorkspace(window.authAPI.getCurrentWorkspace());
+    authApi.switchWorkspace(workspaceId);
+    setCurrentWorkspace(authApi.getCurrentWorkspace());
   }, []);
 
   const refreshWorkspaces = useCallback(async () => {
-    if (window.authAPI) {
-      setWorkspaces(window.authAPI.getUserWorkspaces() || []);
-    }
+    setWorkspaces(authApi.getWorkspaces());
   }, []);
 
   const clearError = useCallback(() => {

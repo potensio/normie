@@ -1,15 +1,14 @@
 /**
- * ChatContext - Thin orchestrator combining chat hooks
+ * ChatContext - Stateless orchestrator combining chat hooks
  * 
- * This context provides a unified interface for chat operations.
- * All logic is extracted to hooks for testability and separation of concerns.
+ * This context does NOT hold state. It only combines hooks and exposes
+ * their values through a unified API. All logic is in hooks for testability.
  */
-import { createContext, useContext, useCallback, useState } from 'react';
+import { createContext, useContext, useState, useCallback } from 'react';
 import type { Chat, Message, Provider, ToolCall, Todo, ThinkingMode } from '@normie/types';
 import { useAuth } from './AuthContext';
-import { useChats, usePreferences, useChatStream, useChatActions } from '@/hooks';
+import { useChats, usePreferences, useChatStream, useChatActions, useChatSender } from '@/hooks';
 import { setCurrentChatId } from '@/lib/storage';
-import { useQueryClient } from '@tanstack/react-query';
 
 interface ChatContextType {
   // State
@@ -39,8 +38,7 @@ interface ChatContextType {
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
 
 export function ChatProvider({ children }: { children: React.ReactNode }) {
-  const { isLoggedIn, currentWorkspace, clearAuthState } = useAuth();
-  const queryClient = useQueryClient();
+  const { isLoggedIn, currentWorkspace, user, clearAuthState } = useAuth();
 
   // TanStack Query for chats list
   const { data: chats = [], refetch: refreshChats } = useChats(currentWorkspace?.id);
@@ -64,9 +62,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     todos,
     sendMessage: sendStreamMessage,
     stopStreaming: stopStream,
-    setMessages,
-    setToolCalls,
-    setTodos,
+    loadMessages,
     reset: resetStream,
   } = useChatStream();
 
@@ -85,75 +81,24 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     isStreaming,
     abortStreaming: () => stopStream(currentChat?.id || '', selectedProvider),
     clearAuthState,
-    onChatLoaded: (chat) => {
-      setMessages(chat.messages);
-      setTodos(chat.todos || []);
-      setToolCalls(chat.toolCalls || []);
-    },
+    onChatLoaded: (chat) => loadMessages(chat),
     reset: resetStream,
   });
 
-  // Send message wrapper
-  const sendMessage = useCallback(
-    async (content: string) => {
-      if (!content.trim() || isStreaming) return;
-
-      const chatId = currentChat?.id || crypto.randomUUID();
-      const chatTitle =
-        currentChat?.title ||
-        (content.length > 30 ? content.substring(0, 30) + '...' : content);
-
-      const userId = window.authAPI?.getUser()?.id;
-      if (!userId) return;
-
-      const result = await sendStreamMessage({
-        content,
-        chatId,
-        chatTitle,
-        provider: selectedProvider,
-        model: selectedModel,
-        workspaceId: currentWorkspace?.id || null,
-        userId,
-      });
-
-      if (result) {
-        // Update current chat
-        const finalMessages: Message[] = messages.filter((m) => 
-          !m.content.startsWith('[Error:')
-        );
-
-        const updatedChat: Chat = {
-          id: result.chatId,
-          title: result.chatTitle,
-          provider: selectedProvider,
-          model: selectedModel,
-          updatedAt: Date.now(),
-          messages: finalMessages,
-          todos,
-          toolCalls,
-        };
-
-        setCurrentChat(updatedChat);
-        setCurrentChatId(result.chatId);
-
-        // Refresh chat list from server
-        queryClient.invalidateQueries({ queryKey: ['chats', 'list'] });
-      }
-    },
-    [
-      currentChat,
-      currentWorkspace,
-      messages,
-      selectedProvider,
-      selectedModel,
-      todos,
-      toolCalls,
-      isStreaming,
-      sendStreamMessage,
-      setCurrentChat,
-      queryClient,
-    ],
-  );
+  // Chat sender (extracted orchestration logic)
+  const { sendMessage } = useChatSender({
+    currentChat,
+    workspaceId: currentWorkspace?.id,
+    provider: selectedProvider,
+    model: selectedModel,
+    userId: user?.id,
+    messages,
+    todos,
+    toolCalls,
+    isStreaming,
+    sendStreamMessage,
+    setCurrentChat,
+  });
 
   // Stop streaming wrapper
   const stopStreaming = useCallback(async () => {

@@ -5,8 +5,9 @@
  */
 import { useState, useCallback, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import type { Chat, Message, Todo, ToolCall } from '@normie/types';
+import type { Chat } from '@normie/types';
 import { transformApiChat } from '@normie/utils';
+import { chatApi } from '@/lib/api';
 import { chatKeys } from './useChats';
 import { setCurrentChatId, getCurrentChatId } from '@/lib/storage';
 
@@ -99,23 +100,21 @@ export function useChatActions(params: UseChatActionsParams): UseChatActionsRetu
 
       setIsLoading(true);
       try {
-        const chatData = await window.authAPI?.getChat(chatId);
-        if (chatData) {
-          const chat = transformApiChat(chatData as Record<string, unknown>);
-          setCurrentChat(chat);
-          onChatLoaded(chat);
-          setCurrentChatId(chatId);
+        const chatData = await chatApi.get(chatId);
+        const chat = transformApiChat(chatData);
+        setCurrentChat(chat);
+        onChatLoaded(chat);
+        setCurrentChatId(chatId);
 
-          // Update the chats list cache with this chat's metadata
-          queryClient.setQueryData(chatKeys.list(workspaceId), (old: Chat[] | undefined) => {
-            if (!old) return old;
-            const exists = old.find((c) => c.id === chatId);
-            if (exists) {
-              return old.map((c) => (c.id === chatId ? { ...c, messages: [] } : c));
-            }
-            return [{ ...chat, messages: [] }, ...old];
-          });
-        }
+        // Update the chats list cache with this chat's metadata
+        queryClient.setQueryData(chatKeys.list(workspaceId), (old: Chat[] | undefined) => {
+          if (!old) return old;
+          const exists = old.find((c) => c.id === chatId);
+          if (exists) {
+            return old.map((c) => (c.id === chatId ? { ...c, messages: [] } : c));
+          }
+          return [{ ...chat, messages: [] }, ...old];
+        });
       } catch (err) {
         console.error('[useChatActions] Failed to load chat:', err);
         if (err instanceof Error && err.message.includes('Session expired')) {
@@ -133,7 +132,7 @@ export function useChatActions(params: UseChatActionsParams): UseChatActionsRetu
     async (chatId: string) => {
       try {
         if (isLoggedIn) {
-          await window.authAPI?.deleteChat(chatId);
+          await chatApi.delete(chatId);
         }
         queryClient.invalidateQueries({ queryKey: ['chats', 'list'] });
         queryClient.removeQueries({ queryKey: chatKeys.detail(chatId) });

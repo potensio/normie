@@ -12,6 +12,7 @@ export { useLogin, useLogout, useRegister } from './useAuth';
 export { useChats, useChatDetail, useDeleteChat, chatKeys } from './useChats';
 export { useChatStream } from './useChatStream';
 export { useChatActions } from './useChatActions';
+export { useChatSender } from './useChatSender';
 
 // Workspaces
 export { useWorkspaces, useCreateWorkspace, workspaceKeys } from './useWorkspaces';

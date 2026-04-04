@@ -1,9 +1,7 @@
 import { useAuth } from "@/contexts/AuthContext";
 import { useChat } from "@/contexts/ChatContext";
-import { ChatSidebar } from "@/components/ChatSidebar";
+import { ChatSidebarContainer, ChatInputContainer, MessageList } from "@/components/chat";
 import { RightSidebar } from "@/components/RightSidebar";
-import { ChatInput } from "@/components/ChatInput";
-import { MessageList } from "@/components/chat/MessageList";
 import { AuthModal } from "@/components/AuthModal";
 import { MoreVertical } from "lucide-react";
 
@@ -31,7 +29,7 @@ function App() {
   return (
     <div className="relative h-screen flex overflow-hidden bg-zinc-100">
       {/* Left Sidebar - Chat History */}
-      <ChatSidebar />
+      <ChatSidebarContainer />
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
@@ -49,7 +47,7 @@ function App() {
               </div>
             </div>
 
-            <ChatInput variant="home" />
+            <ChatInputContainer variant="home" />
           </div>
         ) : (
           /* Chat View */
@@ -71,7 +69,7 @@ function App() {
               <MessageList messages={messages} isStreaming={isStreaming} />
 
               {/* Input */}
-              <ChatInput variant="chat" />
+              <ChatInputContainer variant="chat" />
             </div>
 
             {/* Right Sidebar */}

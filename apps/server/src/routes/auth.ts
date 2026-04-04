@@ -256,6 +256,9 @@ router.get('/status', async (req: Request, res: Response) => {
 router.post('/accept-invite/:token', async (req: Request, res: Response) => {
   try {
     const token = req.params.token;
+    if (Array.isArray(token)) {
+      return res.status(400).json({ error: 'Invalid token' });
+    }
     const db = getDb();
 
     const [invite] = await db.select()
