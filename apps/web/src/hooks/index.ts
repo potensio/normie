@@ -10,6 +10,8 @@ export { useLogin, useLogout, useRegister } from './useAuth';
 
 // Chats
 export { useChats, useChatDetail, useDeleteChat, chatKeys } from './useChats';
+export { useChatStream } from './useChatStream';
+export { useChatActions } from './useChatActions';
 
 // Workspaces
 export { useWorkspaces, useCreateWorkspace, workspaceKeys } from './useWorkspaces';
