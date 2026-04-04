@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { X, HelpCircle } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAuthMutations } from "@/hooks";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -10,7 +11,8 @@ interface SettingsModalProps {
 type TabType = "persona" | "account";
 
 export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
+  const { logout, isLoggingOut } = useAuthMutations();
   const [activeTab, setActiveTab] = useState<TabType>("persona");
   const [soulContent, setSoulContent] = useState(
     "# Who You Are\n\nDescribe the personality and behavior you want your AI to have...\n\n## Examples\n\n- Be concise and direct\n- Focus on code quality\n- Explain reasoning when asked\n"
@@ -25,6 +27,10 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     await new Promise((resolve) => setTimeout(resolve, 500));
     setIsSaving(false);
     // TODO: Show toast notification
+  };
+
+  const handleLogout = () => {
+    logout.mutate();
   };
 
   const tabs: { id: TabType; label: string }[] = [
@@ -47,7 +53,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           <h2 className="text-lg font-medium text-zinc-950">Settings</h2>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-zinc-100 transition-colors text-zinc-500"
+            className="w-8 h-8 rounded-lg flex items justify-center hover:bg-zinc-100 transition-colors text-zinc-500"
           >
             <X className="w-5 h-5" strokeWidth={1.5} />
           </button>
@@ -125,10 +131,11 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
               {/* Logout button */}
               <button
-                onClick={logout}
-                className="px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                onClick={handleLogout}
+                disabled={isLoggingOut}
+                className="px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
               >
-                Log out
+                {isLoggingOut ? "Logging out..." : "Log out"}
               </button>
             </div>
           )}

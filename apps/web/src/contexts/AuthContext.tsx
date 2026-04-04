@@ -2,19 +2,28 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import type { User, Workspace } from '@normie/types';
 
 interface AuthContextType {
+  // State
   user: User | null;
   currentWorkspace: Workspace | null;
   workspaces: Workspace[];
   isLoggedIn: boolean;
   isLoading: boolean;
   error: string | null;
-  login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, displayName?: string) => Promise<void>;
-  logout: () => Promise<void>;
+  
+  // State setters (for useAuthMutations hook)
+  setUser: React.Dispatch<React.SetStateAction<User | null>>;
+  setCurrentWorkspace: React.Dispatch<React.SetStateAction<Workspace | null>>;
+  setWorkspaces: React.Dispatch<React.SetStateAction<Workspace[]>>;
+  setError: React.Dispatch<React.SetStateAction<string | null>>;
+  
+  // Non-mutation methods (still in context)
   createWorkspace: (name: string, description?: string) => Promise<Workspace>;
   switchWorkspace: (workspaceId: string) => void;
   refreshWorkspaces: () => Promise<void>;
   clearError: () => void;
+  
+  // For internal use (session expiry, etc.)
+  clearAuthState: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -47,65 +56,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     init();
   }, []);
 
-  const login = useCallback(async (email: string, password: string) => {
-    setError(null);
-    if (!window.authAPI) throw new Error('Auth API not available');
-    
-    try {
-      await window.authAPI.login(email, password);
-      setUser(window.authAPI.getUser());
-      setCurrentWorkspace(window.authAPI.getCurrentWorkspace());
-      setWorkspaces(window.authAPI.getUserWorkspaces() || []);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Login failed';
-      setError(message);
-      throw err;
-    }
-  }, []);
-
-  const register = useCallback(async (email: string, password: string, displayName?: string) => {
-    setError(null);
-    if (!window.authAPI) throw new Error('Auth API not available');
-    
-    try {
-      await window.authAPI.register(email, password, displayName);
-      setUser(window.authAPI.getUser());
-      setCurrentWorkspace(window.authAPI.getCurrentWorkspace());
-      setWorkspaces(window.authAPI.getUserWorkspaces() || []);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Registration failed';
-      setError(message);
-      throw err;
-    }
-  }, []);
-
-  const logout = useCallback(async () => {
-    if (!window.authAPI) return;
-    
-    try {
-      await window.authAPI.logout();
-    } catch (err) {
-      console.error('[AuthContext] Logout error:', err);
-    } finally {
-      setUser(null);
-      setCurrentWorkspace(null);
-      setWorkspaces([]);
-      setError(null);
-    }
-  }, []);
-
   const createWorkspace = useCallback(async (name: string, description?: string) => {
     if (!window.authAPI) throw new Error('Auth API not available');
     
-    try {
-      const workspace = await window.authAPI.createWorkspace(name, description);
-      setWorkspaces(prev => [...prev, workspace]);
-      return workspace;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to create workspace';
-      setError(message);
-      throw err;
-    }
+    const workspace = await window.authAPI.createWorkspace(name, description);
+    setWorkspaces(prev => [...prev, workspace]);
+    return workspace;
   }, []);
 
   const switchWorkspace = useCallback((workspaceId: string) => {
@@ -115,7 +71,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const refreshWorkspaces = useCallback(async () => {
-    // Workspaces are stored in authAPI, just refresh from there
     if (window.authAPI) {
       setWorkspaces(window.authAPI.getUserWorkspaces() || []);
     }
@@ -125,20 +80,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setError(null);
   }, []);
 
+  /**
+   * Clear all auth state (for session expiry, logout, etc.)
+   * Used internally by useAuthMutations and for session error handling.
+   */
+  const clearAuthState = useCallback(() => {
+    setUser(null);
+    setCurrentWorkspace(null);
+    setWorkspaces([]);
+    setError(null);
+  }, []);
+
   const value: AuthContextType = {
+    // State
     user,
     currentWorkspace,
     workspaces,
     isLoggedIn: !!user,
     isLoading,
     error,
-    login,
-    register,
-    logout,
+    
+    // State setters
+    setUser,
+    setCurrentWorkspace,
+    setWorkspaces,
+    setError,
+    
+    // Non-mutation methods
     createWorkspace,
     switchWorkspace,
     refreshWorkspaces,
     clearError,
+    
+    // For session expiry handling
+    clearAuthState,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -11,6 +11,7 @@
   "dependencies": {
     "@normie/types": "workspace:*",
     "@normie/utils": "workspace:*",
+    "@tanstack/react-query": "^5.96.2",
     "lucide-react": "^0.344.0",
     "marked": "^12.0.0",
     "react": "^18.2.0",

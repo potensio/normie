@@ -4,6 +4,7 @@ import React, {
   useState,
   useCallback,
   useEffect,
+  useRef,
 } from "react";
 import type {
   Chat,
@@ -15,8 +16,11 @@ import type {
   InlineToolCall,
 } from "@normie/types";
 import { generateId, transformApiChat } from "@normie/utils";
-import { DEFAULT_PROVIDER, getDefaultModel, isValidModel } from "@/lib/constants";
 import { useAuth } from "./AuthContext";
+import { useChats, useDeleteChat, chatKeys } from "@/hooks";
+import { usePreferences } from "@/hooks";
+import { setCurrentChatId, getCurrentChatId } from "@/lib/storage";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface ChatContextType {
   // State
@@ -45,113 +49,56 @@ interface ChatContextType {
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
 
-// Preference keys
-const PREFERRED_PROVIDER_KEY = "selectedProvider";
-const PREFERRED_MODEL_KEY = "selectedModel";
-
-// Valid providers list for validation
-const VALID_PROVIDERS: Provider[] = ["claude", "opencode", "kimi", "bedrock"];
-
-/**
- * Get saved provider preference with validation.
- * Clears invalid preferences from localStorage.
- */
-function getPreferredProvider(): Provider {
-  const saved = localStorage.getItem(PREFERRED_PROVIDER_KEY) as Provider;
-  if (saved && VALID_PROVIDERS.includes(saved)) {
-    return saved;
-  }
-  // Clear invalid preference
-  if (saved) {
-    localStorage.removeItem(PREFERRED_PROVIDER_KEY);
-  }
-  return DEFAULT_PROVIDER;
-}
-
-/**
- * Get saved model preference with validation.
- * Clears invalid preferences from localStorage.
- */
-function getPreferredModel(provider: Provider): string {
-  const saved = localStorage.getItem(PREFERRED_MODEL_KEY);
-  if (saved && isValidModel(provider, saved)) {
-    return saved;
-  }
-  // Clear invalid preference
-  if (saved) {
-    localStorage.removeItem(PREFERRED_MODEL_KEY);
-  }
-  return getDefaultModel(provider);
-}
-
 export function ChatProvider({ children }: { children: React.ReactNode }) {
-  const { isLoggedIn, currentWorkspace, logout } = useAuth();
+  const { isLoggedIn, currentWorkspace, clearAuthState } = useAuth();
+  const queryClient = useQueryClient();
 
-  const [chats, setChats] = useState<Chat[]>([]);
+  // TanStack Query for chats list
+  const { data: chats = [], refetch: refreshChats } = useChats(currentWorkspace?.id);
+
+  // Preferences hook - use directly, pass to context for backwards compatibility
+  const {
+    provider: selectedProvider,
+    model: selectedModel,
+    setProvider: setProviderPreference,
+    setModel: setModelPreference,
+  } = usePreferences();
+
+  // Local state for current chat
   const [currentChat, setCurrentChat] = useState<Chat | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [todos, setTodos] = useState<Todo[]>([]);
   const [toolCalls, setToolCalls] = useState<ToolCall[]>([]);
-  const [selectedProvider, setSelectedProvider] =
-    useState<Provider>(getPreferredProvider());
-  const [selectedModel, setSelectedModel] = useState<string>(
-    getPreferredModel(getPreferredProvider()),
-  );
   const [thinkingMode, setThinkingMode] = useState<ThinkingMode>("normal");
 
   // Abort controller for streaming
-  const abortControllerRef = React.useRef<AbortController | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
-  // Load chats on mount and when workspace changes
+  // Workspace change - clear current chat only
   useEffect(() => {
-    if (isLoggedIn && currentWorkspace) {
-      refreshChats();
-    } else {
-      // Load from localStorage as fallback
-      const saved = localStorage.getItem("allChats");
-      if (saved) {
-        try {
-          setChats(JSON.parse(saved));
-        } catch {
-          setChats([]);
+    if (currentWorkspace?.id) {
+      setCurrentChat(null);
+      setMessages([]);
+      setToolCalls([]);
+      setTodos([]);
+      setCurrentChatId(null);
+    }
+  }, [currentWorkspace?.id]);
+
+  // Restore last open chat on mount
+  useEffect(() => {
+    const restoreLastChat = async () => {
+      if (isLoggedIn && currentWorkspace?.id && chats.length > 0) {
+        const lastChatId = getCurrentChatId();
+        if (lastChatId && chats.some((c) => c.id === lastChatId)) {
+          await loadChat(lastChatId);
         }
       }
-    }
-  }, [isLoggedIn, currentWorkspace]);
-
-  const refreshChats = useCallback(async () => {
-    if (!window.authAPI || !currentWorkspace) return;
-
-    try {
-      const chatsData = await window.authAPI.getChats(currentWorkspace.id);
-      // Transform API response - each chat already has the right shape
-      const transformedChats = chatsData.map(
-        (chat: Record<string, unknown>) => ({
-          id: String(chat.id),
-          title: String(chat.title || "New chat"),
-          provider: String(chat.provider || "claude") as Provider,
-          model: String(chat.model || ""),
-          sessionId: chat.sessionId ? String(chat.sessionId) : undefined,
-          updatedAt: chat.updatedAt
-            ? new Date(chat.updatedAt as string).getTime()
-            : Date.now(),
-          messages: [], // Messages loaded separately
-        }),
-      );
-
-      // Sort by updated time (most recent first)
-      transformedChats.sort((a: Chat, b: Chat) => b.updatedAt - a.updatedAt);
-      setChats(transformedChats);
-    } catch (err) {
-      console.error("[ChatContext] Failed to load chats:", err);
-      // If session expired, logout
-      if (err instanceof Error && err.message.includes("Session expired")) {
-        logout();
-      }
-    }
-  }, [currentWorkspace, logout]);
+    };
+    restoreLastChat();
+  }, [isLoggedIn, currentWorkspace?.id, chats.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const createNewChat = useCallback(() => {
     // Abort any ongoing request
@@ -164,14 +111,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     setMessages([]);
     setTodos([]);
     setToolCalls([]);
-
-    // Reset to saved preferences with validation
-    const provider = getPreferredProvider();
-    const model = getPreferredModel(provider);
-    setSelectedProvider(provider);
-    setSelectedModel(model);
-
-    localStorage.removeItem("currentChatId");
+    setCurrentChatId(null);
   }, [isStreaming]);
 
   const loadChat = useCallback(
@@ -185,96 +125,76 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       // First, check if we have a cached version with messages
       const cachedChat = chats.find((c) => c.id === chatId);
       if (cachedChat && cachedChat.messages.length > 0) {
-        // Use cached version (instant)
         setCurrentChat(cachedChat);
         setMessages(cachedChat.messages);
         setTodos(cachedChat.todos || []);
         setToolCalls(cachedChat.toolCalls || []);
-
-        // Update current state (but don't update preferences - user's choice should persist)
-        if (cachedChat.provider) {
-          setSelectedProvider(cachedChat.provider);
-        }
-        if (cachedChat.model) {
-          setSelectedModel(cachedChat.model);
-        }
-
-        localStorage.setItem("currentChatId", chatId);
+        setCurrentChatId(chatId);
         return;
       }
 
       // If not cached or empty, load from API
-      let chat: Chat | null = null;
-      if (isLoggedIn && currentWorkspace) {
-        try {
-          const chatData = await window.authAPI?.getChat(chatId);
-          if (chatData) {
-            chat = transformApiChat(chatData as Record<string, unknown>);
-
-            // Cache the loaded chat
-            setChats((prev) => {
-              const index = prev.findIndex((c) => c.id === chatId);
-              if (index !== -1) {
-                const updated = [...prev];
-                updated[index] = chat!;
-                return updated;
-              }
-              return prev;
-            });
-          }
-        } catch (err) {
-          console.error("[ChatContext] Failed to load chat from API:", err);
-          if (err instanceof Error && err.message.includes("Session expired")) {
-            logout();
-            return;
-          }
-        }
+      if (!isLoggedIn || !currentWorkspace) {
+        return;
       }
 
-      if (chat) {
-        setCurrentChat(chat);
-        setMessages(chat.messages);
-        setTodos(chat.todos || []);
-        setToolCalls(chat.toolCalls || []);
+      setIsLoading(true);
+      try {
+        const chatData = await window.authAPI?.getChat(chatId);
+        if (chatData) {
+          const chat = transformApiChat(chatData as Record<string, unknown>);
+          setCurrentChat(chat);
+          setMessages(chat.messages);
+          setTodos(chat.todos || []);
+          setToolCalls(chat.toolCalls || []);
+          setCurrentChatId(chatId);
 
-        // Restore provider/model for current session (but don't update preferences)
-        if (chat.provider) {
-          setSelectedProvider(chat.provider);
+          // Update the chats list cache with this chat's metadata
+          queryClient.setQueryData(chatKeys.list(currentWorkspace.id), (old: Chat[] | undefined) => {
+            if (!old) return old;
+            const exists = old.find((c) => c.id === chatId);
+            if (exists) {
+              return old.map((c) => (c.id === chatId ? { ...c, messages: [] } : c));
+            }
+            return [{ ...chat, messages: [] }, ...old];
+          });
         }
-        if (chat.model) {
-          setSelectedModel(chat.model);
+      } catch (err) {
+        console.error("[ChatContext] Failed to load chat from API:", err);
+        if (err instanceof Error && err.message.includes("Session expired")) {
+          clearAuthState();
+          queryClient.clear();
         }
-
-        localStorage.setItem("currentChatId", chatId);
+      } finally {
+        setIsLoading(false);
       }
     },
-    [chats, isLoggedIn, currentWorkspace, isStreaming, logout],
+    [chats, isLoggedIn, currentWorkspace, isStreaming, clearAuthState, queryClient],
   );
 
   const deleteChat = useCallback(
     async (chatId: string) => {
-      // Delete from API
-      if (isLoggedIn) {
-        try {
+      // Use the mutation hook's logic directly
+      try {
+        if (isLoggedIn) {
           await window.authAPI?.deleteChat(chatId);
-        } catch (err) {
-          console.error("[ChatContext] Failed to delete chat from API:", err);
-          if (err instanceof Error && err.message.includes("Session expired")) {
-            logout();
-            return;
-          }
-          // Continue with local deletion anyway
+        }
+        // Invalidate queries to trigger refetch
+        queryClient.invalidateQueries({ queryKey: chatKeys.lists() });
+        queryClient.removeQueries({ queryKey: chatKeys.detail(chatId) });
+
+        if (currentChat?.id === chatId) {
+          createNewChat();
+        }
+      } catch (err) {
+        console.error("[ChatContext] Failed to delete chat:", err);
+        if (err instanceof Error && err.message.includes("Session expired")) {
+          clearAuthState();
+          queryClient.clear();
         }
       }
-
-      // Remove from local state
-      setChats((prev) => prev.filter((c) => c.id !== chatId));
-
-      if (currentChat?.id === chatId) {
-        createNewChat();
-      }
     },
-    [currentChat, isLoggedIn, createNewChat, logout],
+    [currentChat, isLoggedIn, createNewChat, clearAuthState, queryClient],
   );
 
   const sendMessage = useCallback(
@@ -332,18 +252,17 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         const reader = await response.getReader();
         let fullContent = "";
         let fullReasoning = "";
-        const pendingToolCalls = new Map<string, string>(); // API tool ID -> local tool ID
+        const pendingToolCalls = new Map<string, string>();
 
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
-
           if (!value) continue;
 
           // Parse SSE data
           const lines = value.split("\n");
           for (const line of lines) {
-            if (line.startsWith(":")) continue; // Skip heartbeat comments
+            if (line.startsWith(":")) continue;
             if (!line.startsWith("data: ")) continue;
 
             try {
@@ -353,7 +272,6 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
                 case "text":
                   if (data.content) {
                     if (data.isReasoning) {
-                      // Accumulate reasoning content
                       fullReasoning += data.content;
                       setMessages((prev) =>
                         prev.map((m) =>
@@ -363,7 +281,6 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
                         ),
                       );
                     } else {
-                      // Regular content
                       fullContent += data.content;
                       setMessages((prev) =>
                         prev.map((m) =>
@@ -380,7 +297,6 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
                   if (data.name) {
                     const localToolId = generateId();
 
-                    // Create tool call for sidebar
                     const toolCall: ToolCall = {
                       id: localToolId,
                       name: data.name,
@@ -389,12 +305,10 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
                     };
                     setToolCalls((prev) => [...prev, toolCall]);
 
-                    // Track correlation if API provided an ID
                     if (data.id) {
                       pendingToolCalls.set(data.id, localToolId);
                     }
 
-                    // Add inline tool call to the message
                     const inlineToolCall: InlineToolCall = {
                       id: localToolId,
                       name: data.name,
@@ -415,7 +329,6 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
                       ),
                     );
 
-                    // Handle TodoWrite
                     if (data.name === "TodoWrite" && data.input?.todos) {
                       setTodos(data.input.todos as Todo[]);
                     }
@@ -430,7 +343,6 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
                       : null;
 
                     if (localId) {
-                      // Update sidebar tool call
                       setToolCalls((prev) =>
                         prev.map((t) =>
                           t.id === localId
@@ -439,7 +351,6 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
                         ),
                       );
 
-                      // Update inline tool call
                       setMessages((prev) =>
                         prev.map((m) =>
                           m.id === assistantMessageId
@@ -468,7 +379,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
                 case "error":
                   throw new Error(data.message || "Stream error");
               }
-            } catch (parseErr) {
+            } catch {
               // Skip parse errors
             }
           }
@@ -488,16 +399,15 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           }),
         );
 
-        // Update or create chat in local state
+        // Update current chat
         const finalMessages: Message[] = [
-          ...messages,
+          ...messages.filter((m) => m.id !== assistantMessageId),
           userMessage,
           {
             id: assistantMessageId,
             role: "assistant",
             content: fullContent,
             reasoning: fullReasoning || undefined,
-            inlineToolCalls: undefined, // Don't persist inline tool calls in saved state
           },
         ];
 
@@ -513,24 +423,13 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         };
 
         setCurrentChat(updatedChat);
+        setCurrentChatId(chatId);
 
-        // Update chats list
-        setChats((prev) => {
-          const exists = prev.find((c) => c.id === chatId);
-          if (exists) {
-            return prev.map((c) =>
-              c.id === chatId ? { ...updatedChat, messages: [] } : c,
-            );
-          }
-          return [{ ...updatedChat, messages: [] }, ...prev];
-        });
-
-        // Refresh chat list from server to get the saved version
-        await refreshChats();
+        // Refresh chat list from server
+        queryClient.invalidateQueries({ queryKey: chatKeys.lists() });
       } catch (error) {
         console.error("[ChatContext] Send message error:", error);
 
-        // Update assistant message with error
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantMessageId
@@ -544,12 +443,12 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           ),
         );
 
-        // If session expired, logout
         if (
           error instanceof Error &&
           error.message.includes("Session expired")
         ) {
-          logout();
+          clearAuthState();
+          queryClient.clear();
         }
       } finally {
         setIsStreaming(false);
@@ -565,8 +464,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       todos,
       toolCalls,
       isStreaming,
-      refreshChats,
-      logout,
+      clearAuthState,
+      queryClient,
     ],
   );
 
@@ -583,17 +482,12 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   }, [isStreaming, currentChat, selectedProvider]);
 
   const setProvider = useCallback((provider: Provider) => {
-    setSelectedProvider(provider);
-    const defaultModel = getDefaultModel(provider);
-    setSelectedModel(defaultModel);
-    localStorage.setItem(PREFERRED_PROVIDER_KEY, provider);
-    localStorage.setItem(PREFERRED_MODEL_KEY, defaultModel);
-  }, []);
+    setProviderPreference(provider);
+  }, [setProviderPreference]);
 
   const setModel = useCallback((model: string) => {
-    setSelectedModel(model);
-    localStorage.setItem(PREFERRED_MODEL_KEY, model);
-  }, []);
+    setModelPreference(model);
+  }, [setModelPreference]);
 
   const toggleThinkingMode = useCallback(() => {
     setThinkingMode((prev) => (prev === "normal" ? "extended" : "normal"));
@@ -618,7 +512,9 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     setProvider,
     setModel,
     toggleThinkingMode,
-    refreshChats,
+    refreshChats: async () => {
+      await refreshChats();
+    },
   };
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;

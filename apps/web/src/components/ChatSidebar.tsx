@@ -1,5 +1,4 @@
 import {
-  ChevronDown,
   Search,
   PenSquare,
   Settings,
@@ -10,10 +9,11 @@ import { useChat } from "@/contexts/ChatContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useState, useRef, useEffect } from "react";
 import { SettingsModal } from "./SettingsModal";
+import { WorkspaceDropdown } from "./WorkspaceDropdown";
 
 export function ChatSidebar() {
   const { chats, currentChat, loadChat, createNewChat, deleteChat } = useChat();
-  const { user, currentWorkspace } = useAuth();
+  const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -29,12 +29,6 @@ export function ChatSidebar() {
     if (!user) return "U";
     const name = user.displayName || user.email;
     return name.substring(0, 2).toUpperCase();
-  };
-
-  // Get workspace initials for avatar
-  const getWorkspaceInitials = () => {
-    if (!currentWorkspace) return "WS";
-    return currentWorkspace.name.substring(0, 2).toUpperCase();
   };
 
   const handleDeleteChat = (e: React.MouseEvent, chatId: string) => {
@@ -68,21 +62,7 @@ export function ChatSidebar() {
   return (
     <aside className="bg-white border-r border-zinc-200 p-4 pt-16 gap-4 flex-col w-[240px] flex-shrink-0 flex overflow-y-auto">
       {/* Workspace Selector */}
-      <div className="flex items-center justify-between w-full">
-        <button className="flex items-center gap-2 hover:bg-zinc-50 rounded-xl px-2 py-1.5 -mx-2 transition-colors flex-1">
-          <div className="w-7 h-7 rounded-lg bg-green-400 flex items-center justify-center flex-shrink-0">
-            <span className="text-xs font-medium text-zinc-950">
-              {getWorkspaceInitials()}
-            </span>
-          </div>
-          <div className="flex flex-col flex-1 min-w-0 text-left">
-            <span className="text-sm font-medium text-zinc-950 truncate tracking-tight">
-              {currentWorkspace?.name || "Workspace"}
-            </span>
-          </div>
-          <ChevronDown className="w-4 h-4 text-zinc-400 flex-shrink-0" />
-        </button>
-      </div>
+      <WorkspaceDropdown />
 
       {/* New Chat Button */}
       <button

@@ -3,7 +3,7 @@ import { useChat } from "@/contexts/ChatContext";
 import { ChatSidebar } from "@/components/ChatSidebar";
 import { RightSidebar } from "@/components/RightSidebar";
 import { ChatInput } from "@/components/ChatInput";
-import { MessageList } from "@/components/MessageList";
+import { MessageList } from "@/components/chat/MessageList";
 import { AuthModal } from "@/components/AuthModal";
 import { MoreVertical } from "lucide-react";
 

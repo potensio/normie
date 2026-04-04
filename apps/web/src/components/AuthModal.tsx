@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useAuthMutations } from '@/hooks';
 
 export function AuthModal() {
-  const { login, register, isLoading, error, clearError } = useAuth();
+  const { isLoading, error, clearError } = useAuth();
+  const { login, register, isLoggingIn, isRegistering } = useAuthMutations();
   const [isRegisterMode, setIsRegisterMode] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -12,14 +14,10 @@ export function AuthModal() {
     e.preventDefault();
     clearError();
 
-    try {
-      if (isRegisterMode) {
-        await register(email, password, displayName);
-      } else {
-        await login(email, password);
-      }
-    } catch (err) {
-      // Error is handled by AuthContext
+    if (isRegisterMode) {
+      register.mutate({ email, password, displayName });
+    } else {
+      login.mutate({ email, password });
     }
   };
 
@@ -27,6 +25,8 @@ export function AuthModal() {
     setIsRegisterMode(!isRegisterMode);
     clearError();
   };
+
+  const isSubmitting = isLoggingIn || isRegistering || isLoading;
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[10000]">
@@ -88,7 +88,7 @@ export function AuthModal() {
             
             <button 
               type="submit" 
-              disabled={isLoading}
+              disabled={isSubmitting}
               className="w-full py-3 bg-coral hover:bg-coral-dark disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-colors mt-2"
             >
               {isRegisterMode ? 'Create Account' : 'Login'}
