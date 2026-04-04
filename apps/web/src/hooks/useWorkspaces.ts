@@ -1,14 +1,29 @@
+/**
+ * Workspace hooks - queries and mutations
+ * 
+ * All workspace operations grouped in one file.
+ */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { Workspace } from '@normie/types';
 
+// ============================================
+// Query Keys
+// ============================================
+
 export const workspaceKeys = {
   all: ['workspaces'] as const,
-  lists: () => [...workspaceKeys.all, 'list'] as const,
   list: () => [...workspaceKeys.all, 'list'] as const,
 };
 
+// ============================================
+// Queries
+// ============================================
+
 /**
- * Hook to fetch user's workspaces
+ * Fetch user's workspaces
+ * 
+ * @example
+ * const { data: workspaces, isLoading } = useWorkspaces();
  */
 export function useWorkspaces() {
   return useQuery({
@@ -16,9 +31,7 @@ export function useWorkspaces() {
     queryFn: async (): Promise<Workspace[]> => {
       if (!window.authAPI) return [];
       
-      // Workspaces are already loaded in authAPI after login
-      // This query serves as a cache and refresh mechanism
-      const response = await fetch(`${getServerUrl()}/api/workspaces`, {
+      const response = await fetch('http://localhost:3001/api/workspaces', {
         credentials: 'include',
       });
       
@@ -27,15 +40,20 @@ export function useWorkspaces() {
       const data = await response.json();
       return data.workspaces;
     },
-    initialData: () => {
-      // Use authAPI's cached workspaces as initial data
-      return window.authAPI?.getUserWorkspaces() || [];
-    },
+    initialData: () => window.authAPI?.getUserWorkspaces() || [],
   });
 }
 
+// ============================================
+// Mutations
+// ============================================
+
 /**
- * Hook to create a new workspace
+ * Create a new workspace
+ * 
+ * @example
+ * const { mutate: createWorkspace, isPending } = useCreateWorkspace();
+ * createWorkspace({ name: 'My Workspace' });
  */
 export function useCreateWorkspace() {
   const queryClient = useQueryClient();
@@ -46,16 +64,8 @@ export function useCreateWorkspace() {
       return await window.authAPI.createWorkspace(name, description);
     },
     onSuccess: (newWorkspace) => {
-      // Invalidate and refetch workspaces
       queryClient.invalidateQueries({ queryKey: workspaceKeys.list() });
-      // Update authAPI's local cache
-      const workspaces = window.authAPI?.getUserWorkspaces() || [];
       window.authAPI?.switchWorkspace(newWorkspace.id);
     },
   });
-}
-
-// Helper to get server URL (duplicated from preload, but needed for direct fetch)
-function getServerUrl(): string {
-  return 'http://localhost:3001';
 }

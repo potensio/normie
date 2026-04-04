@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { X, HelpCircle } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { useAuthMutations } from "@/hooks";
+import { useLogout } from "@/hooks";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -12,7 +12,7 @@ type TabType = "persona" | "account";
 
 export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const { user } = useAuth();
-  const { logout, isLoggingOut } = useAuthMutations();
+  const { mutate: logout, isPending: isLoggingOut } = useLogout();
   const [activeTab, setActiveTab] = useState<TabType>("persona");
   const [soulContent, setSoulContent] = useState(
     "# Who You Are\n\nDescribe the personality and behavior you want your AI to have...\n\n## Examples\n\n- Be concise and direct\n- Focus on code quality\n- Explain reasoning when asked\n"
@@ -30,7 +30,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   };
 
   const handleLogout = () => {
-    logout.mutate();
+    logout();
   };
 
   const tabs: { id: TabType; label: string }[] = [

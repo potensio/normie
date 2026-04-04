@@ -1,16 +1,25 @@
+/**
+ * Chat hooks - queries and mutations
+ * 
+ * All chat operations grouped in one file.
+ */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { Chat, Provider } from '@normie/types';
 
-// Query keys - centralized for easy invalidation
+// ============================================
+// Query Keys
+// ============================================
+
 export const chatKeys = {
   all: ['chats'] as const,
-  lists: () => [...chatKeys.all, 'list'] as const,
-  list: (workspaceId: string) => [...chatKeys.lists(), workspaceId] as const,
-  details: () => [...chatKeys.all, 'detail'] as const,
-  detail: (chatId: string) => [...chatKeys.details(), chatId] as const,
+  list: (workspaceId: string) => [...chatKeys.all, 'list', workspaceId] as const,
+  detail: (chatId: string) => [...chatKeys.all, 'detail', chatId] as const,
 };
 
-// Transform API chat response to local Chat type
+// ============================================
+// Helpers
+// ============================================
+
 function transformApiChat(chat: Record<string, unknown>): Chat {
   return {
     id: String(chat.id),
@@ -27,8 +36,15 @@ function transformApiChat(chat: Record<string, unknown>): Chat {
   };
 }
 
+// ============================================
+// Queries
+// ============================================
+
 /**
- * Hook to fetch chats for a workspace
+ * Fetch chats for a workspace
+ * 
+ * @example
+ * const { data: chats, isLoading } = useChats(workspaceId);
  */
 export function useChats(workspaceId: string | null | undefined) {
   return useQuery({
@@ -58,9 +74,13 @@ export function useChats(workspaceId: string | null | undefined) {
 }
 
 /**
- * Hook to fetch a single chat with messages
+ * Fetch a single chat with messages
+ * Note: This is named useChatDetail to avoid collision with useChat() from ChatContext
+ * 
+ * @example
+ * const { data: chat } = useChatDetail(chatId);
  */
-export function useChat(chatId: string | null | undefined) {
+export function useChatDetail(chatId: string | null | undefined) {
   return useQuery({
     queryKey: chatKeys.detail(chatId!),
     queryFn: async (): Promise<Chat | null> => {
@@ -75,8 +95,16 @@ export function useChat(chatId: string | null | undefined) {
   });
 }
 
+// ============================================
+// Mutations
+// ============================================
+
 /**
- * Hook to delete a chat
+ * Delete a chat
+ * 
+ * @example
+ * const { mutate: deleteChat } = useDeleteChat();
+ * deleteChat(chatId);
  */
 export function useDeleteChat() {
   const queryClient = useQueryClient();
@@ -87,10 +115,9 @@ export function useDeleteChat() {
       await window.authAPI.deleteChat(chatId);
       return chatId;
     },
-    onSuccess: (chatId, _variables, context) => {
-      // Invalidate all chat lists to refetch
-      queryClient.invalidateQueries({ queryKey: chatKeys.lists() });
-      // Remove the specific chat from cache
+    onSuccess: (chatId) => {
+      // Invalidate chat lists and remove from cache
+      queryClient.invalidateQueries({ queryKey: ['chats', 'list'] });
       queryClient.removeQueries({ queryKey: chatKeys.detail(chatId) });
     },
   });

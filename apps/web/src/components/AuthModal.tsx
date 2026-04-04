@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useAuthMutations } from '@/hooks';
+import { useLogin, useRegister } from '@/hooks';
 
 export function AuthModal() {
   const { isLoading, error, clearError } = useAuth();
-  const { login, register, isLoggingIn, isRegistering } = useAuthMutations();
+  const { mutate: login, isPending: isLoggingIn } = useLogin();
+  const { mutate: register, isPending: isRegistering } = useRegister();
   const [isRegisterMode, setIsRegisterMode] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -15,9 +16,9 @@ export function AuthModal() {
     clearError();
 
     if (isRegisterMode) {
-      register.mutate({ email, password, displayName });
+      register({ email, password, displayName });
     } else {
-      login.mutate({ email, password });
+      login({ email, password });
     }
   };
 

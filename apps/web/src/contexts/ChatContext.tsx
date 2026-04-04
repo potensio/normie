@@ -180,7 +180,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           await window.authAPI?.deleteChat(chatId);
         }
         // Invalidate queries to trigger refetch
-        queryClient.invalidateQueries({ queryKey: chatKeys.lists() });
+        queryClient.invalidateQueries({ queryKey: ['chats', 'list'] });
         queryClient.removeQueries({ queryKey: chatKeys.detail(chatId) });
 
         if (currentChat?.id === chatId) {
@@ -426,7 +426,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         setCurrentChatId(chatId);
 
         // Refresh chat list from server
-        queryClient.invalidateQueries({ queryKey: chatKeys.lists() });
+        queryClient.invalidateQueries({ queryKey: ['chats', 'list'] });
       } catch (error) {
         console.error("[ChatContext] Send message error:", error);
 
