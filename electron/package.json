@@ -1,0 +1,19 @@
+{
+  "name": "@normie/electron",
+  "version": "1.0.0",
+  "private": true,
+  "main": "./dist/main.js",
+  "scripts": {
+    "dev": "tsc && npx electron .",
+    "build": "tsc",
+    "start": "npx electron ."
+  },
+  "dependencies": {
+    "@normie/types": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "electron": "^39.2.7",
+    "typescript": "^5.2.2"
+  }
+}

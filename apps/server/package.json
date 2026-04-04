@@ -1,0 +1,44 @@
+{
+  "name": "@normie/server",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "dev": "npx tsx --watch src/index.ts",
+    "build": "tsc",
+    "start": "npx tsx src/index.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
+    "db:migrate": "drizzle-kit migrate"
+  },
+  "dependencies": {
+    "@normie/types": "workspace:*",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.7",
+    "@opencode-ai/sdk": "latest",
+    "bcrypt": "^6.0.0",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "drizzle-orm": "^0.45.1",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
+    "openai": "^6.32.0",
+    "pg": "^8.20.0",
+    "uuid": "^13.0.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/bcrypt": "^5.0.0",
+    "@types/cookie-parser": "^1.4.0",
+    "@types/cors": "^2.8.0",
+    "@types/express": "^5.0.0",
+    "@types/jsonwebtoken": "^9.0.0",
+    "@types/node": "^20.0.0",
+    "@types/pg": "^8.10.0",
+    "@types/uuid": "^10.0.0",
+    "drizzle-kit": "^0.31.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.2.2"
+  }
+}
