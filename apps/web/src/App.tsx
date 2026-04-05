@@ -48,7 +48,7 @@ function App() {
                   Mari berbincang dan berkreasi bersama 🤙
                 </h1>
                 <p className="text-sm text-text-tertiary mt-1 tracking-wide font-light">
-                  Powered by Claude Code and Composio
+                  Automate across 1,000+ apps
                 </p>
               </div>
             </div>
@@ -65,8 +65,8 @@ function App() {
                   {currentChat?.title || "New chat"}
                 </h1>
                 <div className="flex items-center gap-2">
-                  <button 
-                    onClick={() => setIsRightSidebarOpen(prev => !prev)}
+                  <button
+                    onClick={() => setIsRightSidebarOpen((prev) => !prev)}
                     className="w-8 h-8 rounded-full bg-zinc-100 flex items-center justify-center hover:bg-zinc-200 transition-colors text-zinc-600"
                     title={isRightSidebarOpen ? "Hide sidebar" : "Show sidebar"}
                   >
@@ -80,9 +80,9 @@ function App() {
               </div>
 
               {/* Messages */}
-              <MessageList 
-                messages={messages} 
-                isStreaming={isStreaming} 
+              <MessageList
+                messages={messages}
+                isStreaming={isStreaming}
                 chatId={currentChat?.id}
               />
 

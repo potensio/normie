@@ -38,14 +38,23 @@ export function ChatInputContainer({ variant = "chat" }: { variant?: "home" | "c
     return Object.fromEntries(providers.map(p => [p.id, p.name]));
   }, [providers]);
 
-  // Ensure selected model is valid for the provider when models load
+  // Handle provider change - auto-select first valid model
+  const handleSelectProvider = (provider: Provider) => {
+    setProvider(provider);
+    // Immediately select first model for the new provider
+    const newModels = getModelsForProvider(provider);
+    if (newModels.length > 0) {
+      setModel(newModels[0].value);
+    }
+  };
+
+  // Ensure selected model is valid for the provider when models load (initial load)
   useEffect(() => {
     if (!isLoading && models.length > 0) {
       const modelExists = models.some(m => m.value === selectedModel);
       if (!modelExists) {
-        // Pick first model or default
-        const firstModel = models[0]?.value || selectedModel;
-        setModel(firstModel);
+        // Pick first model
+        setModel(models[0].value);
       }
     }
   }, [isLoading, models, selectedModel, setModel]);
@@ -68,7 +77,7 @@ export function ChatInputContainer({ variant = "chat" }: { variant?: "home" | "c
       providers={providerList}
       models={models}
       providerLabels={providerLabels}
-      onSelectProvider={setProvider}
+      onSelectProvider={handleSelectProvider}
       onSelectModel={setModel}
       onSend={sendMessage}
       onStop={stopStreaming}

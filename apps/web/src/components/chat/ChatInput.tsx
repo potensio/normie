@@ -5,7 +5,15 @@
  */
 
 import { useState, useRef, useCallback, useEffect } from "react";
-import { Send, Paperclip, Plus, Square, ChevronDown, Check as CheckIcon, Loader2 } from "lucide-react";
+import {
+  Send,
+  Paperclip,
+  Plus,
+  Square,
+  ChevronDown,
+  Check as CheckIcon,
+  Loader2,
+} from "lucide-react";
 import type { Provider } from "@normie/types";
 import type { ModelOption } from "@/hooks/useProviders";
 
@@ -92,7 +100,8 @@ export function ChatInput({
     models.find((m) => m.value === selectedModel)?.label || selectedModel;
 
   // Find provider description (if available)
-  const selectedProviderLabel = providerLabels[selectedProvider] || selectedProvider;
+  const selectedProviderLabel =
+    providerLabels[selectedProvider] || selectedProvider;
 
   return (
     <div
@@ -134,7 +143,7 @@ export function ChatInput({
               <Plus className="w-4 h-4" strokeWidth={1.5} />
             </button>
             <div className="h-5 w-px bg-zinc-200 mx-1" />
-            
+
             {/* Provider Selector */}
             <ProviderSelector
               providers={providers}
@@ -144,7 +153,7 @@ export function ChatInput({
               variant={variant}
               isLoading={isLoadingProviders}
             />
-            
+
             {/* Model Selector */}
             <ModelSelector
               models={models}
@@ -226,9 +235,7 @@ function ProviderSelector({
         disabled={isLoading}
         className="flex items-center gap-1 px-3 py-2 text-sm text-gray-600 hover:bg-cream rounded-lg transition-colors disabled:opacity-50"
       >
-        {isLoading ? (
-          <Loader2 className="w-3 h-3 animate-spin" />
-        ) : null}
+        {isLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
         <span>{selectedLabel}</span>
         <ChevronDown
           size={16}
@@ -241,7 +248,7 @@ function ProviderSelector({
           {providers.map((provider) => {
             const label = providerLabels[provider] || provider;
             const isSelected = selectedProvider === provider;
-            
+
             return (
               <button
                 key={provider}
@@ -250,12 +257,10 @@ function ProviderSelector({
                   isSelected ? "bg-cream" : "hover:bg-cream"
                 }`}
               >
-                <span className="text-sm font-medium text-gray-900">
+                <span className="text-start text-sm font-medium text-gray-900 truncate">
                   {label}
                 </span>
-                {isSelected && (
-                  <CheckIcon size={16} className="text-coral" />
-                )}
+                {isSelected && <CheckIcon size={16} className="text-coral" />}
               </button>
             );
           })}
@@ -323,7 +328,9 @@ function ModelSelector({
       {isOpen && (
         <div className="absolute bottom-full right-0 mb-2 w-48 bg-white border border-gray-200 rounded-xl shadow-dropdown p-2 z-50 max-h-64 overflow-y-auto">
           {models.length === 0 ? (
-            <div className="px-3 py-2 text-sm text-gray-400">No models available</div>
+            <div className="px-3 py-2 text-sm text-gray-400">
+              No models available
+            </div>
           ) : (
             models.map((model) => (
               <button
@@ -333,7 +340,9 @@ function ModelSelector({
                   selectedModel === model.value ? "bg-cream" : "hover:bg-cream"
                 }`}
               >
-                <span className="text-sm text-gray-900">{model.label}</span>
+                <span className="text-start text-sm truncate">
+                  {model.label}
+                </span>
                 {selectedModel === model.value && (
                   <CheckIcon size={16} className="text-coral" />
                 )}

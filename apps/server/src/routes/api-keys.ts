@@ -8,12 +8,8 @@ router.use(requireAuth);
 
 // Request body types
 interface SaveApiKeyBody {
-  apiKey: string;
+  apiKey: string | Record<string, any>; // String for simple keys, object for complex credentials
 }
-
-// Valid API key providers
-const VALID_PROVIDERS = ['anthropic', 'openai', 'kimi', 'opencode', 'google', 'mistral'] as const;
-type ValidProvider = typeof VALID_PROVIDERS[number];
 
 // ============================================
 // LIST API KEYS
@@ -28,7 +24,7 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
-// ============================================
+/// ============================================
 // SAVE API KEY
 // ============================================
 router.post('/:provider', async (req: Request, res: Response) => {
@@ -37,15 +33,16 @@ router.post('/:provider', async (req: Request, res: Response) => {
     const { apiKey } = req.body as SaveApiKeyBody;
 
     if (!apiKey) {
-      return res.status(400).json({ error: 'API key required' });
+      return res.status(400).json({ error: 'API key or credentials required' });
     }
 
-    // Validate provider
-    if (!VALID_PROVIDERS.includes(provider as ValidProvider)) {
-      return res.status(400).json({ error: `Invalid provider. Valid: ${VALID_PROVIDERS.join(', ')}` });
-    }
+    // Convert object credentials to JSON string for storage
+    const keyToStore = typeof apiKey === 'string' ? apiKey : JSON.stringify(apiKey);
 
-    const key = await saveApiKey(req.userId!, provider, apiKey);
+    // BYOK model: Allow any provider string
+    // No validation needed - users can configure any provider they want
+
+    const key = await saveApiKey(req.userId!, provider, keyToStore);
     res.json(key);
   } catch (err) {
     console.error('[API-KEYS] Save error:', err);

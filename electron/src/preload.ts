@@ -377,7 +377,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     }
   },
 
-  // Send a chat message to the backend
+  // Send a chat message to the backend via Pi Agent streaming endpoint
   sendMessage: async (
     message: string,
     chatId: string,
@@ -396,23 +396,35 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const signal = currentAbortController.signal;
 
     return new Promise((resolve, reject) => {
-      console.log('[PRELOAD] Sending message to backend:', message);
+      console.log('[PRELOAD] Sending message to Pi Agent:', { chatId, provider, model });
 
-      fetch(`${SERVER_URL}/api/chat`, {
+      // Use new /api/chats/:chatId/stream endpoint
+      fetch(`${SERVER_URL}/api/chats/${chatId}/stream`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         credentials: 'include',
-        body: JSON.stringify({ message, chatId, provider, model, workspaceId, userId }),
+        body: JSON.stringify({ 
+          message, 
+          provider, 
+          model,
+          workspaceId
+        }),
         signal
       })
         .then(response => {
           if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status} ${response.statusText}`);
+            // Try to parse error response
+            response.json().then(errData => {
+              reject(new Error(errData.error || `HTTP ${response.status}`));
+            }).catch(() => {
+              reject(new Error(`HTTP error! status: ${response.status} ${response.statusText}`));
+            });
+            return;
           }
 
-          console.log('[PRELOAD] Connected to backend successfully');
+          console.log('[PRELOAD] Connected to Pi Agent successfully');
 
           // Return a custom object with methods to read the stream
           resolve({

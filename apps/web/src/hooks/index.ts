@@ -30,3 +30,6 @@ export { usePreferences } from './usePreferences';
 
 // Providers
 export { useProviders, providerKeys, type ModelOption, type UseProvidersReturn } from './useProviders';
+
+// API Keys
+export { useApiKeys, useSaveApiKey, useDeleteApiKey, apiKeyKeys, type ApiKeyInfo } from './useApiKeys';

@@ -2,13 +2,14 @@ import { useState } from "react";
 import { X, HelpCircle } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLogout } from "@/hooks";
+import { ProvidersTab } from "./settings/ProvidersTab";
 
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-type TabType = "persona" | "account";
+type TabType = "persona" | "providers" | "account";
 
 export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const { user } = useAuth();
@@ -35,6 +36,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
   const tabs: { id: TabType; label: string }[] = [
     { id: "persona", label: "Persona" },
+    { id: "providers", label: "Providers" },
     { id: "account", label: "Account" },
   ];
 
@@ -138,6 +140,10 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 {isLoggingOut ? "Logging out..." : "Log out"}
               </button>
             </div>
+          )}
+
+          {activeTab === "providers" && (
+            <ProvidersTab />
           )}
         </div>
 

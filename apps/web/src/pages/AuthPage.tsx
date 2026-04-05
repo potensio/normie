@@ -209,7 +209,7 @@ export function AuthPage() {
         {/* Footer */}
         <div className="mt-14 text-center">
           <p className="text-xs text-text-tertiary">
-            Powered by Claude Code and Composio
+            Automate across 1,000+ apps
           </p>
         </div>
       </div>

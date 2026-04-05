@@ -17,8 +17,10 @@ export interface PiConfig {
 
 /**
  * Map of provider IDs to their environment variable names
+ * Based on official Pi docs: https://github.com/badlogic/pi-mono/blob/main/packages/ai/src/env-api-keys.ts
  */
 const PROVIDER_ENV_KEYS: Record<string, string[]> = {
+  // Simple API key providers
   anthropic: ["ANTHROPIC_API_KEY"],
   openai: ["OPENAI_API_KEY"],
   google: ["GEMINI_API_KEY", "GOOGLE_API_KEY"],
@@ -26,15 +28,31 @@ const PROVIDER_ENV_KEYS: Record<string, string[]> = {
   xai: ["XAI_API_KEY"],
   mistral: ["MISTRAL_API_KEY"],
   openrouter: ["OPENROUTER_API_KEY"],
-  ollama: [], // Local, no API key needed
-  "amazon-bedrock": ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"],
+  cerebras: ["CEREBRAS_API_KEY"],
+  "kimi-coding": ["KIMI_API_KEY"],
+  zai: ["ZAI_API_KEY"],
+  minimax: ["MINIMAX_API_KEY"],
+  opencode: ["OPENCODE_API_KEY"],
+  "opencode-go": ["OPENCODE_API_KEY"],
+  
+  // OAuth/subscription providers (no env key, use /login)
+  "github-copilot": [],
+  "google-gemini-cli": [],
+  "google-antigravity": [],
+  "openai-codex": [],
+  
+  // Local providers
+  ollama: [],
+  
+  // Cloud providers
+  "amazon-bedrock": ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_PROFILE", "AWS_BEARER_TOKEN_BEDROCK"],
   "azure-openai-responses": ["AZURE_OPENAI_API_KEY"],
 };
 
 /**
  * Map normie provider names to Pi provider names
  */
-const PROVIDER_ALIAS: Record<string, string> = {
+export const PROVIDER_ALIAS: Record<string, string> = {
   bedrock: "amazon-bedrock",
   azure: "azure-openai-responses",
 };
@@ -46,8 +64,12 @@ export function loadPiConfig(): PiConfig {
   const rawProvider = process.env.DEFAULT_PROVIDER || "anthropic";
   const defaultProvider = PROVIDER_ALIAS[rawProvider] || rawProvider;
   
+  // BYOK model: enable all providers by default, users provide their own keys
+  // Get all available providers from Pi AI registry
+  const allProviders = getProviders();
+  
   const rawEnabledProviders = (
-    process.env.ENABLED_PROVIDERS || "anthropic,openai,google,groq"
+    process.env.ENABLED_PROVIDERS || allProviders.join(",")
   ).split(",").map(p => p.trim());
   
   // Map provider aliases
@@ -117,12 +139,13 @@ export function validatePiConfig(config: PiConfig): void {
     );
   }
 
-  // Warn about missing API keys for enabled providers
+  // Info about API keys for enabled providers (BYOK model)
   for (const provider of config.enabledProviders) {
     const needsKey = PROVIDER_ENV_KEYS[provider]?.length;
     if (needsKey && !config.apiKeys[provider]) {
-      console.warn(
-        `[PiConfig] Missing API key for enabled provider: ${provider}`
+      console.info(
+        `[PiConfig] Provider '${provider}' enabled but no API key configured. ` +
+        `Set ${PROVIDER_ENV_KEYS[provider]?.join(' or ')} to use this provider.`
       );
     }
   }

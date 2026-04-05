@@ -1,17 +1,5 @@
 <p align="center">
-  <h1 align="center">Come hang with Claude 🤙</h1>
-</p>
-
-<p align="center">
-  <a href="https://platform.composio.dev?utm_source=Github&utm_medium=Banner&utm_content=open-claude-cowork">
-    <img src="assets/open_claude_cowork_banner.png" width="800">
-  </a>
-</p>
-
-<p align="center">
-  <a href="https://platform.composio.dev?utm_source=github&utm_medium=gif&utm_campaign=2101&utm_content=open-claude-cowork">
-    <img src="open-claude-cowork.gif" alt="Come hang with Claude Demo" width="800">
-  </a>
+  <h1 align="center">Normie 🤙</h1>
 </p>
 
 <p align="center">
@@ -32,16 +20,8 @@
 <p align="center">
   An open-source desktop chat application powered by Claude Agent SDK and Composio Tool Router. Automate your work end-to-end across desktop and all your work apps in one place.
   <br><br>
-  <a href="https://platform.composio.dev?utm_source=github&utm_medium=description&utm_campaign=2101&utm_content=open-claude-cowork">
+  <a href="https://platform.composio.dev">
     <b>Get your free API key to get started →</b>
-  </a>
-</p>
-
-<p align="center">
-  <i>Pst. hey, you, join our stargazers :)</i>
-  <br>
-  <a href="https://github.com/ComposioHQ/open-claude-cowork">
-    <img src="https://img.shields.io/github/stars/ComposioHQ/open-claude-cowork.svg?style=social&label=Star&maxAge=2592000" alt="GitHub stars">
   </a>
 </p>
 
@@ -49,34 +29,32 @@
 
 ## Quick Start
 
-### Come hang with Claude 🤙
-
 ```bash
-git clone https://github.com/ComposioHQ/open-claude-cowork.git
-cd open-claude-cowork
-./setup.sh
+git clone <your-repo-url>
+cd normie
+pnpm install
 ```
 
-Then run in two terminals:
+Then run:
 ```bash
-# Terminal 1
-cd server && npm start
+pnpm dev
+```
 
-# Terminal 2
-npm start
+For Electron mode:
+```bash
+pnpm dev:electron
 ```
 
 ---
 
 ## Features
 
-### Come hang with Claude 🤙
-- **Multi-Provider Support** - Claude Agent SDK or Opencode for different models
+- **Multi-Provider Support** - Claude Agent SDK, Opencode, Kimi, AWS Bedrock
 - **Persistent Sessions** - Context maintained across messages
 - **Real-time Streaming** - Token-by-token response display
 - **Tool Visualization** - See tool inputs/outputs in the sidebar
 - **Skills Support** - Extend Claude with custom capabilities
-- **Modern UI** - Clean, dark-themed interface
+- **Modern UI** - Clean, dark-themed interface with Tailwind CSS
 - **500+ Integrations** - Gmail, Slack, GitHub, Calendar and more via Composio
 
 ---
@@ -95,17 +73,34 @@ npm start
 
 ## Configuration
 
-### API Keys
+### API Keys (BYOK - Bring Your Own Key)
 
-You need:
-- **Anthropic API key** from [console.anthropic.com](https://console.anthropic.com)
-- **Composio API key** from [app.composio.dev](https://app.composio.dev)
-- **Opencode API key** (optional) from [opencode.dev](https://opencode.dev)
+Normie uses a **BYOK model** - all AI providers are enabled by default. 
+Simply add API keys for the providers you want to use.
+
+**Minimum required:**
+- **Anthropic API key** from [console.anthropic.com](https://console.anthropic.com) (for Claude models)
+- **Composio API key** from [app.composio.dev](https://app.composio.dev) (for tool integrations)
+
+**Optional providers** (add keys for any you want to use):
+- **OpenAI** - [platform.openai.com](https://platform.openai.com)
+- **Google/Gemini** - [aistudio.google.com](https://aistudio.google.com)
+- **Groq** - [console.groq.com](https://console.groq.com)
+- **X.AI (Grok)** - [x.ai](https://x.ai)
+- **Mistral** - [console.mistral.ai](https://console.mistral.ai)
+- **OpenRouter** - [openrouter.ai](https://openrouter.ai) (aggregates multiple providers)
+- **AWS Bedrock** - Uses AWS credentials
+- **Azure OpenAI** - Uses Azure credentials
+- **Ollama** - Runs locally, no API key needed
+
+And many more! Check `.env.example` for the full list.
 
 ```bash
 cp .env.example .env
 # Edit .env with your keys
 ```
+
+**Note:** You can limit enabled providers by setting `ENABLED_PROVIDERS` in your `.env` file.
 
 ### Skills
 
@@ -128,13 +123,13 @@ See [Agent Skills documentation](https://platform.claude.com/docs/en/agent-sdk/s
 ## Project Structure
 
 ```
-open-claude-cowork/
-├── main.js              # Electron main process
-├── renderer/            # Frontend UI
-├── server/              # Backend + providers
-│   ├── providers/       # Claude & Opencode implementations
-│   └── server.js        # Express server
-└── .claude/skills/      # Custom agent skills
+normie/
+├── electron/           # Electron main process
+├── packages/           # Shared packages (types, utils)
+├── apps/
+│   ├── web/           # Frontend (React + Vite + Tailwind)
+│   └── server/        # Backend (Express + TypeScript)
+└── .claude/skills/    # Custom agent skills
 ```
 
 ---
@@ -182,7 +177,7 @@ open-claude-cowork/
 </p>
 
 <p align="center">
-  <a href="https://platform.composio.dev/?utm_source=github&utm_medium=community&utm_campaign=2101&utm_content=open claude cowork">
+  <a href="https://platform.composio.dev">
     <img src="https://img.shields.io/badge/Get_Started_For_Free-4F46E5?style=for-the-badge" alt="Get Started For Free"/>
   </a>
 </p>

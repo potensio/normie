@@ -44,21 +44,38 @@ export const FALLBACK_MODELS: Record<string, Array<{ value: string; label: strin
 
 // Provider display names
 export const PROVIDER_LABELS: Record<string, string> = {
+  // Simple API key providers
   anthropic: 'Anthropic',
   openai: 'OpenAI',
-  google: 'Google',
+  google: 'Google AI',
   groq: 'Groq',
   xai: 'xAI',
   mistral: 'Mistral',
   openrouter: 'OpenRouter',
+  cerebras: 'Cerebras',
+  'kimi-coding': 'Kimi Coding',
+  zai: 'ZAI',
+  minimax: 'MiniMax',
+  opencode: 'OpenCode Zen',
+  'opencode-go': 'OpenCode Go',
+  
+  // OAuth/subscription providers
+  'github-copilot': 'GitHub Copilot',
+  'google-gemini-cli': 'Google Gemini CLI',
+  'google-antigravity': 'Google Antigravity',
+  'openai-codex': 'OpenAI Codex',
+  
+  // Local providers
   ollama: 'Ollama',
+  
+  // Cloud providers
   'amazon-bedrock': 'Amazon Bedrock',
   'azure-openai-responses': 'Azure OpenAI',
-  // Legacy providers (for backward compatibility)
-  claude: 'Claude',
-  opencode: 'Opencode',
-  kimi: 'Kimi',
-  bedrock: 'Bedrock',
+  
+  // Alias mappings (for backward compatibility)
+  bedrock: 'Amazon Bedrock',
+  azure: 'Azure OpenAI',
+  kimi: 'Kimi Coding',
 };
 
 // Legacy PROVIDER_MODELS for backward compatibility

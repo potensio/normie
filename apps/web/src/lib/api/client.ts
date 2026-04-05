@@ -75,3 +75,20 @@ export async function apiRequest<T>(
 
   return response.json();
 }
+
+/**
+ * Auth API client with raw fetch access
+ * Use this when you need more control over the response
+ */
+export const authAPI = {
+  /**
+   * Make an authenticated fetch request
+   * Returns the raw Response object for custom handling
+   */
+  fetch: async (endpoint: string, options: RequestInit = {}): Promise<Response> => {
+    return fetch(`${BASE_URL}${endpoint}`, {
+      ...options,
+      credentials: 'include',
+    });
+  },
+};
