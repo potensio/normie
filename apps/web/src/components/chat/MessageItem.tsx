@@ -29,10 +29,17 @@ export const MessageItem = memo(function MessageItem({
         transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
         className="flex flex-col gap-1 items-end"
       >
-        <div className="bg-zinc-100 px-4 py-2.5 rounded-2xl max-w-2xl">
-          <p className="text-sm font-light text-zinc-900 leading-relaxed">{message.content}</p>
+        {/* Glass container wrapper */}
+        <div className="inline-block p-1.5 pb-0.5 rounded-3xl bg-white/40 border border-white/60 shadow-glass">
+          <div className="bg-gradient-to-br from-purple-500 to-purple-600 px-5 py-3 rounded-3xl max-w-2xl border border-purple-400/50 shadow-purple">
+            <p className="text-sm font-normal text-white leading-relaxed">
+              {message.content}
+            </p>
+          </div>
         </div>
-        <span className="text-xs font-extralight text-zinc-400">Just now</span>
+        <span className="text-xs font-light text-text-tertiary mr-2">
+          Just now
+        </span>
       </motion.div>
     );
   }
@@ -66,7 +73,9 @@ export const MessageItem = memo(function MessageItem({
         <div className="space-y-3">
           <AnimatedStream content={message.content} isStreaming={isStreaming} />
           {!isStreaming && (
-            <span className="text-xs font-light text-zinc-400">Just now</span>
+            <span className="text-xs font-light text-text-tertiary">
+              Just now
+            </span>
           )}
         </div>
       )}
@@ -82,7 +91,7 @@ export const MessageItem = memo(function MessageItem({
             {[0, 1, 2].map((i) => (
               <motion.div
                 key={i}
-                className="w-2 h-2 bg-zinc-400 rounded-full"
+                className="w-2 h-2 bg-purple-500 rounded-full"
                 animate={{ y: [0, -4, 0] }}
                 transition={{
                   duration: 0.6,
@@ -93,6 +102,7 @@ export const MessageItem = memo(function MessageItem({
               />
             ))}
           </div>
+          <span className="sr-only">Generating response. Click the stop button in the input to cancel.</span>
         </motion.div>
       )}
     </motion.div>

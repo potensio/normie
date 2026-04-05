@@ -1,25 +1,31 @@
+import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useChat } from "@/contexts/ChatContext";
-import { ChatSidebarContainer, ChatInputContainer, MessageList } from "@/components/chat";
+import {
+  ChatSidebarContainer,
+  ChatInputContainer,
+  MessageList,
+} from "@/components/chat";
 import { RightSidebar } from "@/components/RightSidebar";
-import { AuthModal } from "@/components/AuthModal";
-import { MoreVertical } from "lucide-react";
+import { AuthPage } from "@/pages/AuthPage";
+import { ChevronLeft, PanelRightOpen } from "lucide-react";
 
 function App() {
   const { isLoggedIn, isLoading: authLoading } = useAuth();
   const { currentChat, messages, isStreaming } = useChat();
+  const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
 
-  // Show auth modal if not logged in
+  // Show auth page if not logged in
   if (!isLoggedIn && !authLoading) {
-    return <AuthModal />;
+    return <AuthPage />;
   }
 
   // Show loading state
   if (authLoading) {
     return (
-      <div className="fixed inset-0 bg-cream flex flex-col items-center justify-center gap-4">
-        <div className="w-10 h-10 border-[3px] border-gray-200 border-t-coral rounded-full animate-spin" />
-        <p className="text-gray-600">Loading...</p>
+      <div className="fixed inset-0 bg-bg-base flex flex-col items-center justify-center gap-4">
+        <div className="w-10 h-10 border-[3px] border-purple-400/30 border-t-purple-500 rounded-full animate-spin" />
+        <p className="text-text-secondary">Loading...</p>
       </div>
     );
   }
@@ -27,7 +33,7 @@ function App() {
   const isHomeView = !currentChat && messages.length === 0;
 
   return (
-    <div className="relative h-screen flex overflow-hidden bg-zinc-100">
+    <div className="relative h-screen flex overflow-hidden bg-zinc-50">
       {/* Left Sidebar - Chat History */}
       <ChatSidebarContainer />
 
@@ -38,10 +44,10 @@ function App() {
           <div className="flex-1 flex flex-col items-center justify-center px-6 py-10 overflow-hidden bg-white">
             <div className="mb-8">
               <div className="flex flex-col items-center gap-2">
-                <h1 className="font-serif text-[42px] font-normal text-zinc-950 tracking-tight">
-                  Come hang with Claude 🤙
+                <h1 className="font-accent text-4xl font-normal text-text-primary tracking-tighter">
+                  Mari berbincang dan berkreasi bersama 🤙
                 </h1>
-                <p className="text-sm text-zinc-600 mt-1 tracking-wide font-light">
+                <p className="text-sm text-text-tertiary mt-1 tracking-wide font-light">
                   Powered by Claude Code and Composio
                 </p>
               </div>
@@ -54,13 +60,21 @@ function App() {
           <div className="flex-1 flex h-screen overflow-hidden">
             <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden bg-white">
               {/* Chat Header */}
-              <div className="flex items-center justify-between px-6 py-3.5">
-                <h1 className="text-sm font-medium text-zinc-950 tracking-tight">
+              <div className="flex items-center justify-between px-6 py-3.5 bg-white">
+                <h1 className="text-sm font-medium text-text-primary tracking-tight">
                   {currentChat?.title || "New chat"}
                 </h1>
                 <div className="flex items-center gap-2">
-                  <button className="w-8 h-8 rounded-full bg-zinc-100 flex items-center justify-center hover:bg-zinc-200 transition-colors text-zinc-600">
-                    <MoreVertical className="w-4 h-4" strokeWidth={1.5} />
+                  <button 
+                    onClick={() => setIsRightSidebarOpen(prev => !prev)}
+                    className="w-8 h-8 rounded-full bg-zinc-100 flex items-center justify-center hover:bg-zinc-200 transition-colors text-zinc-600"
+                    title={isRightSidebarOpen ? "Hide sidebar" : "Show sidebar"}
+                  >
+                    {isRightSidebarOpen ? (
+                      <ChevronLeft className="w-4 h-4" strokeWidth={1.5} />
+                    ) : (
+                      <PanelRightOpen className="w-4 h-4" strokeWidth={1.5} />
+                    )}
                   </button>
                 </div>
               </div>
@@ -73,7 +87,7 @@ function App() {
             </div>
 
             {/* Right Sidebar */}
-            <RightSidebar />
+            {isRightSidebarOpen && <RightSidebar />}
           </div>
         )}
       </div>

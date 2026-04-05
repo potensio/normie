@@ -1,15 +1,15 @@
 /**
  * ChatInput - Presentational component
- * 
+ *
  * Pure UI component for the chat input area.
  */
 import { useState, useRef, useCallback } from "react";
-import { Send, Paperclip, Plus } from "lucide-react";
-import type { Provider } from '@normie/types';
+import { Send, Paperclip, Plus, Square } from "lucide-react";
+import type { Provider } from "@normie/types";
 
 interface ChatInputProps {
   variant?: "home" | "chat";
-  
+
   // Provider/model selection
   selectedProvider: Provider;
   selectedModel: string;
@@ -18,11 +18,11 @@ interface ChatInputProps {
   providerLabels: Record<Provider, string>;
   onSelectProvider: (provider: Provider) => void;
   onSelectModel: (model: string) => void;
-  
+
   // Actions
   onSend: (message: string) => void;
   onStop: () => void;
-  
+
   // State
   isStreaming: boolean;
 }
@@ -84,10 +84,17 @@ export function ChatInput({
   }, []);
 
   // Find the label for the currently selected model
-  const selectedModelLabel = models.find(m => m.value === selectedModel)?.label || selectedModel;
+  const selectedModelLabel =
+    models.find((m) => m.value === selectedModel)?.label || selectedModel;
 
   return (
-    <div className={variant === "home" ? "w-full max-w-[680px]" : "p-4"}>
+    <div
+      className={
+        variant === "home"
+          ? "w-full max-w-[720px]"
+          : "pb-4 max-w-[720px] mx-auto w-full"
+      }
+    >
       <form
         onSubmit={handleSubmit}
         className="bg-zinc-50 border border-zinc-200 rounded-xl p-3.5 flex flex-col gap-3"
@@ -139,10 +146,14 @@ export function ChatInput({
           <button
             type="submit"
             disabled={!message.trim() && !isStreaming}
-            className="flex items-center gap-2 bg-zinc-950 hover:bg-zinc-800 transition-colors rounded-xl py-2 px-4 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+            title={isStreaming ? "Stop generating" : "Send message"}
+            className="flex items-center justify-center w-9 h-9 bg-zinc-950 hover:bg-zinc-800 transition-colors rounded-full text-white disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <Send className="w-3.5 h-3.5" strokeWidth={1.5} />
-            <span className="text-xs font-medium tracking-wide">Send</span>
+            {isStreaming ? (
+              <Square className="w-4 h-4 fill-current" strokeWidth={1.5} />
+            ) : (
+              <Send className="w-4 h-4" strokeWidth={1.5} />
+            )}
           </button>
         </div>
       </form>
@@ -159,7 +170,7 @@ interface ProviderSelectorProps {
   selectedProvider: Provider;
   providerLabels: Record<Provider, string>;
   onSelect: (provider: Provider) => void;
-  variant: 'home' | 'chat';
+  variant: "home" | "chat";
 }
 
 function ProviderSelector({
@@ -174,13 +185,16 @@ function ProviderSelector({
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
         setIsOpen(false);
       }
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   const handleSelect = (provider: Provider) => {
@@ -190,11 +204,16 @@ function ProviderSelector({
 
   const getDescription = (provider: Provider) => {
     switch (provider) {
-      case 'claude': return 'Claude Agent SDK';
-      case 'opencode': return 'Opencode SDK';
-      case 'kimi': return 'Kimi API';
-      case 'bedrock': return 'AWS Bedrock';
-      default: return '';
+      case "claude":
+        return "Claude Agent SDK";
+      case "opencode":
+        return "Opencode SDK";
+      case "kimi":
+        return "Kimi API";
+      case "bedrock":
+        return "AWS Bedrock";
+      default:
+        return "";
     }
   };
 
@@ -206,7 +225,10 @@ function ProviderSelector({
         className="flex items-center gap-1 px-3 py-2 text-sm text-gray-600 hover:bg-cream rounded-lg transition-colors"
       >
         <span>{providerLabels[selectedProvider]}</span>
-        <ChevronDown size={16} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown
+          size={16}
+          className={`transition-transform ${isOpen ? "rotate-180" : ""}`}
+        />
       </button>
 
       {isOpen && (
@@ -216,9 +238,7 @@ function ProviderSelector({
               key={provider}
               onClick={() => handleSelect(provider)}
               className={`w-full flex flex-col items-start px-3 py-3 rounded-lg transition-colors text-left ${
-                selectedProvider === provider 
-                  ? 'bg-cream' 
-                  : 'hover:bg-cream'
+                selectedProvider === provider ? "bg-cream" : "hover:bg-cream"
               }`}
             >
               <div className="flex items-center justify-between w-full">
@@ -249,7 +269,7 @@ interface ModelSelectorProps {
   selectedModel: string;
   selectedModelLabel: string;
   onSelect: (model: string) => void;
-  variant: 'home' | 'chat';
+  variant: "home" | "chat";
 }
 
 function ModelSelector({
@@ -264,13 +284,16 @@ function ModelSelector({
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
         setIsOpen(false);
       }
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   const handleSelect = (model: string) => {
@@ -286,7 +309,10 @@ function ModelSelector({
         className="flex items-center gap-1 px-3 py-2 text-sm text-gray-600 hover:bg-cream rounded-lg transition-colors"
       >
         <span>{selectedModelLabel}</span>
-        <ChevronDown size={16} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown
+          size={16}
+          className={`transition-transform ${isOpen ? "rotate-180" : ""}`}
+        />
       </button>
 
       {isOpen && (
@@ -296,9 +322,7 @@ function ModelSelector({
               key={model.value}
               onClick={() => handleSelect(model.value)}
               className={`w-full flex items-center justify-between px-3 py-2 rounded-lg transition-colors ${
-                selectedModel === model.value 
-                  ? 'bg-cream' 
-                  : 'hover:bg-cream'
+                selectedModel === model.value ? "bg-cream" : "hover:bg-cream"
               }`}
             >
               <span className="text-sm text-gray-900">{model.label}</span>
@@ -314,5 +338,5 @@ function ModelSelector({
 }
 
 // Need these imports
-import { useEffect } from 'react';
-import { ChevronDown, Check as CheckIcon } from 'lucide-react';
+import { useEffect } from "react";
+import { ChevronDown, Check as CheckIcon } from "lucide-react";

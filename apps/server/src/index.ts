@@ -376,9 +376,18 @@ app.post('/api/chat', async (req, res) => {
         res.write(data);
       }
     } catch (streamError: unknown) {
-      console.error('[CHAT] Stream error during iteration:', streamError);
-      if (!res.writableEnded) {
-        res.write(`data: ${JSON.stringify({ type: 'error', message: (streamError as Error).message })}\n\n`);
+      // Don't send error for user-initiated aborts
+      if ((streamError as Error).name === 'AbortError' ||
+          (streamError as Error).message?.includes('abort')) {
+        console.log('[CHAT] Stream aborted by user');
+        if (!res.writableEnded) {
+          res.write(`data: ${JSON.stringify({ type: 'aborted', provider: providerName })}\n\n`);
+        }
+      } else {
+        console.error('[CHAT] Stream error during iteration:', streamError);
+        if (!res.writableEnded) {
+          res.write(`data: ${JSON.stringify({ type: 'error', message: (streamError as Error).message })}\n\n`);
+        }
       }
     }
 
@@ -403,9 +412,22 @@ app.post('/api/chat', async (req, res) => {
     console.log('[CHAT] Stream completed');
   } catch (error: unknown) {
     clearInterval(heartbeatInterval);
-    console.error('[CHAT] Error:', error);
-    res.write(`data: ${JSON.stringify({ type: 'error', message: (error as Error).message })}\n\n`);
-    res.end();
+
+    // Check if this is a user-initiated abort
+    if ((error as Error).name === 'AbortError' ||
+        (error as Error).message?.includes('abort')) {
+      console.log('[CHAT] Request aborted by user');
+      if (!res.writableEnded) {
+        res.write(`data: ${JSON.stringify({ type: 'aborted', provider: providerName })}\n\n`);
+        res.end();
+      }
+    } else {
+      console.error('[CHAT] Error:', error);
+      if (!res.writableEnded) {
+        res.write(`data: ${JSON.stringify({ type: 'error', message: (error as Error).message })}\n\n`);
+        res.end();
+      }
+    }
   }
 });
 

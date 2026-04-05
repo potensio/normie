@@ -431,6 +431,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
                       value: done ? undefined : decoder.decode(value, { stream: true })
                     };
                   } catch (readError) {
+                    // Check if this is a user-initiated abort
+                    if ((readError as Error).name === 'AbortError') {
+                      console.log('[PRELOAD] Stream aborted by user');
+                      // Return done=true instead of throwing
+                      return { done: true, value: undefined };
+                    }
                     console.error('[PRELOAD] Read error:', readError);
                     throw readError;
                   }

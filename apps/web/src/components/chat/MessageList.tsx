@@ -25,7 +25,7 @@ export function MessageList({ messages, isStreaming }: MessageListProps) {
   return (
     <div className="relative flex-1 overflow-hidden">
       <div ref={containerRef} className="h-full overflow-y-auto px-6 py-6">
-        <div className="max-w-2xl mx-auto space-y-4">
+        <div className="max-w-[720px] mx-auto space-y-4 px-4">
           {messages.map((message, index) => (
             <MessageItem
               key={message.id}

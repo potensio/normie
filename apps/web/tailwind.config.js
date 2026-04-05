@@ -4,6 +4,26 @@ export default {
   theme: {
     extend: {
       colors: {
+        // Design System - Purple Scale
+        purple: {
+          400: "#C084FC",
+          500: "#A855F7",
+          600: "#9333EA",
+        },
+
+        // Design System - Core Colors
+        "primary-dark": "#111111",
+        "bg-base": "#FAFAFA",
+        text: {
+          primary: "#101828",
+          secondary: "#4A5565",
+          tertiary: "#6A7282",
+        },
+        surface: {
+          DEFAULT: "#FFFFFF",
+          secondary: "#F9FAFB",
+        },
+
         // Legacy colors (keeping for backward compatibility)
         cream: "#f5f5f0",
         "cream-light": "#f8f8f6",
@@ -14,19 +34,19 @@ export default {
         // Status colors for tool calls and states
         status: {
           running: {
-            DEFAULT: "#f59e0b", // amber-500
-            light: "#fef3c7", // amber-100
-            dark: "#d97706", // amber-600
+            DEFAULT: "#f59e0b",
+            light: "#fef3c7",
+            dark: "#d97706",
           },
           success: {
-            DEFAULT: "#10b981", // emerald-500
-            light: "#d1fae5", // emerald-100
-            dark: "#059669", // emerald-600
+            DEFAULT: "#10b981",
+            light: "#d1fae5",
+            dark: "#059669",
           },
           error: {
-            DEFAULT: "#ef4444", // red-500
-            light: "#fee2e2", // red-100
-            dark: "#dc2626", // red-600
+            DEFAULT: "#ef4444",
+            light: "#fee2e2",
+            dark: "#dc2626",
           },
         },
 
@@ -88,13 +108,47 @@ export default {
       borderRadius: {
         sm: "var(--radius-sm)",
         md: "var(--radius-md)",
-        lg: "var(--radius-lg)",
+        lg: "1.3125rem", // 21px - Design system card radius
         xl: "var(--radius-xl)",
+        full: "9999px",
       },
       fontFamily: {
-        sans: ["Inter", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "sans-serif"],
+        sans: [
+          "Inter",
+          "-apple-system",
+          "BlinkMacSystemFont",
+          "Segoe UI",
+          "sans-serif",
+        ],
+        accent: ["Playfair Display", "Georgia", "serif"],
         serif: ['"EB Garamond"', "Georgia", "serif"],
-        mono: ['"SF Mono"', "Monaco", '"Cascadia Code"', '"Roboto Mono"', "monospace"],
+        mono: [
+          '"SF Mono"',
+          "Monaco",
+          '"Cascadia Code"',
+          '"Roboto Mono"',
+          "monospace",
+        ],
+      },
+      fontSize: {
+        xs: ["0.765625rem", { lineHeight: "1.43" }],
+        sm: ["0.875rem", { lineHeight: "1.5" }],
+        base: ["1.09375rem", { lineHeight: "1.625" }],
+        lg: ["1.3125rem", { lineHeight: "1.375" }],
+        xl: ["1.96875rem", { lineHeight: "1.111" }],
+        "2xl": ["2.625rem", { lineHeight: "1" }],
+        "3xl": ["3.28125rem", { lineHeight: "1" }],
+        "4xl": ["5.25rem", { lineHeight: "1" }],
+      },
+      spacing: {
+        1: "0.4375rem",
+        2: "0.875rem",
+        3: "1.3125rem",
+        4: "1.75rem",
+        5: "2.1875rem",
+        6: "2.625rem",
+        8: "3.5rem",
+        14: "6.125rem",
       },
       fontWeight: {
         light: "300",
@@ -111,9 +165,19 @@ export default {
         widest: "0.1em",
       },
       boxShadow: {
+        subtle: "0px 2px 10px 0px rgba(0, 0, 0, 0.02)",
+        sm: "0px 1px 2px -1px rgba(0, 0, 0, 0.1), 0px 1px 3px 0px rgba(0, 0, 0, 0.1)",
+        md: "0px 8px 30px 0px rgba(0, 0, 0, 0.06)",
+        purple: "0px 8px 25px 0px rgba(168, 85, 247, 0.35)",
+        glass:
+          "0px 4px 6px -4px rgba(0, 0, 0, 0.1), 0px 10px 15px -3px rgba(0, 0, 0, 0.1)",
         soft: "0 2px 8px rgba(0, 0, 0, 0.04)",
         input: "0 4px 16px rgba(0, 0, 0, 0.06)",
         dropdown: "0 4px 20px rgba(0, 0, 0, 0.15)",
+      },
+      backdropBlur: {
+        sm: "80px",
+        lg: "128px",
       },
     },
   },

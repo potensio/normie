@@ -14,6 +14,17 @@ import type { Message, ToolCall, Todo, InlineToolCall, Provider } from '@normie/
 import { generateId } from '@normie/utils';
 import { chatApi } from '@/lib/api';
 
+// Helper to check if error is a user-initiated abort
+function isAbortError(error: unknown): boolean {
+  if (error instanceof Error) {
+    return error.name === 'AbortError' ||
+           error.message?.includes('abort') ||
+           error.message?.includes('cancelled') ||
+           error.message?.includes('The operation was aborted');
+  }
+  return false;
+}
+
 interface UseChatStreamReturn {
   messages: Message[];
   isStreaming: boolean;
@@ -263,18 +274,36 @@ export function useChatStream(): UseChatStreamReturn {
       } catch (error) {
         console.error('[useChatStream] Error:', error);
 
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === assistantMessageId
-              ? {
-                  ...m,
-                  content:
-                    m.content +
-                    `\n\n[Error: ${error instanceof Error ? error.message : 'Unknown error'}]`,
-                }
-              : m
-          )
-        );
+        // Don't show error for user-initiated abort
+        if (isAbortError(error)) {
+          console.log('[useChatStream] Stream aborted by user, not an error');
+          // Clean up: remove empty placeholder or keep accumulated content
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantMessageId
+                ? {
+                    ...m,
+                    // Keep accumulated content, clean up reasoning if empty
+                    reasoning: m.reasoning || undefined,
+                  }
+                : m
+            )
+          );
+        } else {
+          // Only show error for actual errors (not aborts)
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantMessageId
+                ? {
+                    ...m,
+                    content:
+                      m.content +
+                      `\n\n[Error: ${error instanceof Error ? error.message : 'Unknown error'}]`,
+                  }
+                : m
+            )
+          );
+        }
 
         return null;
       } finally {
