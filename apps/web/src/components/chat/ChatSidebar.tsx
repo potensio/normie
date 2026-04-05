@@ -91,7 +91,7 @@ export function ChatSidebar({
   }, []);
 
   return (
-    <aside className="bg-white border-r border-zinc-200 p-4 pt-16 gap-4 flex-col w-[240px] flex-shrink-0 flex overflow-y-auto">
+    <aside className="bg-white border-r border-zinc-200 p-4 pt-16 gap-3 flex-col w-[280px] flex-shrink-0 flex overflow-y-auto">
       {/* Workspace Selector */}
       <WorkspaceSelector
         currentWorkspace={currentWorkspace}
@@ -106,7 +106,7 @@ export function ChatSidebar({
         className="flex items-center gap-1.5 bg-zinc-100 rounded-full py-1.5 px-3 hover:bg-zinc-200 transition-colors w-full justify-center"
       >
         <PenSquare className="w-3.5 h-3.5 text-zinc-600" strokeWidth={1.5} />
-        <span className="text-xs text-zinc-600 font-light">New Chat</span>
+        <span className="text-[0.9375rem] text-zinc-600 font-light">New Chat</span>
       </button>
 
       {/* Search */}
@@ -117,14 +117,14 @@ export function ChatSidebar({
           placeholder="Search..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="bg-transparent border-none outline-none text-xs text-zinc-900 w-full placeholder-zinc-400 font-light"
+          className="bg-transparent border-none outline-none text-[0.9375rem] text-zinc-900 w-full placeholder-zinc-400 font-light"
         />
       </div>
 
       {/* Conversation List */}
       <div className="flex flex-col gap-0.5 flex-1 overflow-y-auto">
         {filteredChats.length === 0 ? (
-          <div className="p-4 text-center text-zinc-400 text-xs font-light">
+          <div className="p-4 text-center text-zinc-400 text-[0.9375rem] font-light">
             {searchQuery ? "No chats found" : "No chats yet"}
           </div>
         ) : (
@@ -145,7 +145,7 @@ export function ChatSidebar({
                   <div className="w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0"></div>
                 )}
                 <span
-                  className={`text-sm tracking-tight truncate block ${
+                  className={`text-[0.9375rem] tracking-tight truncate block ${
                     currentChatId === chat.id
                       ? "font-medium text-zinc-950"
                       : "font-light text-zinc-600"
@@ -173,7 +173,7 @@ export function ChatSidebar({
                   <div className="absolute right-0 top-8 w-40 bg-white border border-zinc-200 rounded-lg shadow-lg py-1 z-50">
                     <button
                       onClick={(e) => handleDeleteChat(e, chat.id)}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-sm font-light text-red-600 hover:bg-red-50 transition-colors"
+                      className="w-full flex items-center gap-2 px-3 py-2 text-[0.9375rem] font-light text-red-600 hover:bg-red-50 transition-colors"
                     >
                       <Trash2 className="w-3.5 h-3.5" strokeWidth={1.5} />
                       <span>Delete</span>
@@ -192,12 +192,12 @@ export function ChatSidebar({
         className="flex items-center gap-2.5 hover:bg-zinc-50 rounded-xl p-2 w-full transition-colors"
       >
         <div className="w-7 h-7 rounded-full bg-cyan-400 flex items-center justify-center flex-shrink-0">
-          <span className="text-xs font-medium text-zinc-950">
+          <span className="text-[0.9375rem] font-medium text-zinc-950">
             {getUserInitials()}
           </span>
         </div>
         <div className="flex flex-col flex-1 min-w-0 text-left">
-          <span className="text-sm font-normal text-zinc-950 truncate">
+          <span className="text-[0.9375rem] font-normal text-zinc-950 truncate">
             {user?.displayName || user?.email?.split("@")[0] || "User"}
           </span>
         </div>
@@ -338,12 +338,12 @@ function WorkspaceSelector({
         className="flex items-center gap-2 hover:bg-zinc-50 rounded-xl px-2 py-1.5 -mx-2 transition-colors flex-1"
       >
         <div className={`w-7 h-7 rounded-lg ${getWorkspaceColor()} flex items-center justify-center flex-shrink-0`}>
-          <span className="text-xs font-medium text-zinc-950">
+          <span className="text-[0.9375rem] font-medium text-zinc-950">
             {getWorkspaceInitials()}
           </span>
         </div>
         <div className="flex flex-col flex-1 min-w-0 text-left">
-          <span className="text-sm font-medium text-zinc-950 truncate tracking-tight">
+          <span className="text-[0.9375rem] font-medium text-zinc-950 truncate tracking-tight">
             {currentWorkspace?.name || 'Select workspace'}
           </span>
         </div>
@@ -362,24 +362,24 @@ function WorkspaceSelector({
                 onChange={(e) => setNewWorkspaceName(e.target.value)}
                 onKeyDown={handleKeyDown}
                 disabled={isSubmitting}
-                className="w-full text-sm bg-zinc-50 border border-zinc-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-coral/20 focus:border-coral transition-all"
+                className="w-full text-[0.9375rem] bg-zinc-50 border border-zinc-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-coral/20 focus:border-coral transition-all"
                 autoFocus
               />
               {error && (
-                <p className="text-xs text-red-500 mt-1.5">{error}</p>
+                <p className="text-[0.9375rem] text-red-500 mt-1.5">{error}</p>
               )}
               <div className="flex gap-2 mt-2">
                 <button
                   onClick={handleCancelCreate}
                   disabled={isSubmitting}
-                  className="flex-1 text-xs text-zinc-600 hover:text-zinc-900 py-1.5 transition-colors"
+                  className="flex-1 text-[0.9375rem] text-zinc-600 hover:text-zinc-900 py-1.5 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleCreateWorkspace}
                   disabled={isSubmitting || !newWorkspaceName.trim()}
-                  className="flex-1 bg-zinc-900 text-white text-xs py-1.5 rounded-lg hover:bg-zinc-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1"
+                  className="flex-1 bg-zinc-900 text-white text-[0.9375rem] py-1.5 rounded-lg hover:bg-zinc-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1"
                 >
                   {isSubmitting ? (
                     <>
@@ -411,7 +411,7 @@ function WorkspaceSelector({
                         {workspace.name.substring(0, 2).toUpperCase()}
                       </span>
                     </div>
-                    <span className="text-sm text-zinc-900 truncate flex-1">
+                    <span className="text-[0.9375rem] text-zinc-900 truncate flex-1">
                       {workspace.name}
                     </span>
                     {currentWorkspace?.id === workspace.id && (
@@ -431,7 +431,7 @@ function WorkspaceSelector({
                     <div className="w-6 h-6 rounded-md bg-zinc-100 flex items-center justify-center flex-shrink-0">
                       <Plus size={14} className="text-zinc-500" />
                     </div>
-                    <span className="text-sm text-zinc-600">New workspace</span>
+                    <span className="text-[0.9375rem] text-zinc-600">New workspace</span>
                   </button>
                 </div>
               )}

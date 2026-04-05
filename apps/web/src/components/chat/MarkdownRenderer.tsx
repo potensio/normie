@@ -122,13 +122,13 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
-          // Headings with anchor IDs - Compact scale
+          // Headings with anchor IDs - Ultra compact scale
           h1: ({ children, ...props }) => {
             const id = generateHeadingId(children);
             return (
               <h1
                 id={id}
-                className="text-[1.375rem] font-semibold leading-tight mt-6 mb-3 text-zinc-900 tracking-tight"
+                className="text-[1.1875rem] font-semibold leading-tight mt-5 mb-2 text-zinc-900 tracking-tight"
                 {...props}
               >
                 {children}
@@ -140,7 +140,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
             return (
               <h2
                 id={id}
-                className="text-[1.25rem] font-semibold leading-tight mt-5 mb-3 text-zinc-900 tracking-tight border-b border-zinc-200 pb-2"
+                className="text-[1.125rem] font-semibold leading-tight mt-4 mb-2 text-zinc-900 tracking-tight border-b border-zinc-200 pb-1.5"
                 {...props}
               >
                 {children}
@@ -152,7 +152,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
             return (
               <h3
                 id={id}
-                className="text-[1.125rem] font-medium leading-tight mt-4 mb-2 text-zinc-900 tracking-tight"
+                className="text-[1.0625rem] font-medium leading-tight mt-3 mb-2 text-zinc-900 tracking-tight"
                 {...props}
               >
                 {children}
@@ -161,7 +161,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
           },
           h4: ({ children, ...props }) => (
             <h4
-              className="text-[1.0625rem] font-medium leading-tight mt-4 mb-2 text-zinc-900"
+              className="text-[0.9375rem] font-semibold leading-tight mt-3 mb-1.5 text-zinc-900"
               {...props}
             >
               {children}
@@ -169,7 +169,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
           ),
           h5: ({ children, ...props }) => (
             <h5
-              className="text-base font-medium leading-tight mt-3 mb-2 text-zinc-900"
+              className="text-[0.9375rem] font-medium leading-tight mt-2 mb-1.5 text-zinc-700"
               {...props}
             >
               {children}
@@ -177,7 +177,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
           ),
           h6: ({ children, ...props }) => (
             <h6
-              className="text-[0.9375rem] font-semibold leading-tight mt-3 mb-2 text-zinc-500 uppercase tracking-wider"
+              className="text-[0.875rem] font-semibold leading-tight mt-2 mb-1.5 text-zinc-500 uppercase tracking-wider"
               {...props}
             >
               {children}
