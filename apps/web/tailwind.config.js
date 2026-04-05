@@ -11,6 +11,25 @@ export default {
         "coral-dark": "#b5826c",
         "user-bubble": "#e8e8e3",
 
+        // Status colors for tool calls and states
+        status: {
+          running: {
+            DEFAULT: "#f59e0b", // amber-500
+            light: "#fef3c7", // amber-100
+            dark: "#d97706", // amber-600
+          },
+          success: {
+            DEFAULT: "#10b981", // emerald-500
+            light: "#d1fae5", // emerald-100
+            dark: "#059669", // emerald-600
+          },
+          error: {
+            DEFAULT: "#ef4444", // red-500
+            light: "#fee2e2", // red-100
+            dark: "#dc2626", // red-600
+          },
+        },
+
         // Theme system colors
         background: "var(--color-background)",
         foreground: "var(--color-foreground)",

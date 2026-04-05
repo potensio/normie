@@ -9,6 +9,29 @@ This plan outlines improvements for the chat interface UX focusing on three main
 
 ---
 
+## Current Architecture (Updated)
+
+The codebase has been refactored into:
+```
+apps/web/src/
+├── components/
+│   ├── chat/
+│   │   ├── MessageList.tsx    # Scroll container, auto-scroll logic
+│   │   ├── MessageItem.tsx    # Individual message rendering
+│   │   ├── ChatInput.tsx      # Input form
+│   │   └── ...
+│   ├── InlineToolCall.tsx     # Tool call display (needs improvement)
+│   ├── ThinkingBlock.tsx      # Reasoning display (needs improvement)
+│   └── ui/                    # Shared UI components
+├── hooks/
+│   ├── useChatStream.ts       # SSE parsing, message accumulation
+│   ├── useChatSender.ts       # Send message orchestration
+│   └── ...
+└── index.css                  # Global styles
+```
+
+---
+
 ## Current Issues Analysis
 
 ### 1. Tool Call Component (`InlineToolCall.tsx`)
@@ -23,7 +46,7 @@ This plan outlines improvements for the chat interface UX focusing on three main
 ### 2. Streaming/Loading States
 
 **Problems:**
-- "Thinking..." shows only a pulsing dot - no context
+- "Thinking..." shows only a pulsing green dot - no context
 - No skeleton/shimmer during initial load
 - Text appears in chunks causing visual jumps
 - No typing indicator during reasoning
@@ -437,20 +460,36 @@ const ToolResult = motion.pre;
 
 ## Implementation Priority
 
-### P0 - Critical (Do First)
-1. **Tool status indicators** - Add colored borders and icons for states
-2. **Smart auto-scroll** - Prevent scroll hijacking
-3. **Streaming cursor** - Show typing indicator during streaming
+### P0 - Critical (Do First) ✅ DONE
+1. ~~**Tool status indicators**~~ - Added colored borders and icons for states (amber/emerald/red)
+2. **Smart auto-scroll** - Prevent scroll hijacking with useSmartScroll hook
+3. **Streaming cursor** - Blinking cursor during text streaming
 
-### P1 - Important
-4. **Collapsible tool results** - Allow expanding/collapsing
-5. **Tool categorization** - Group tools with icons
-6. **Loading skeleton** - Replace "Thinking..." with skeleton
+### P1 - Important ✅ DONE
+4. **Collapsible tool results** - Expandable result section with animation
+5. **Tool categorization** - Icons and labels based on tool type
+6. **Improved loading state** - Bouncing dots instead of pulsing green
 
-### P2 - Polish
-7. **Typewriter effect** - Smooth text appearance
-8. **Scroll-to-bottom button** - Show when scrolled up
-9. **Message entrance animations** - Fade in new messages
+### P2 - Polish ✅ DONE
+7. **Smooth animations** - Message entrance with framer-motion
+8. **Scroll-to-bottom button** - Shows when scrolled up during streaming
+9. **Thinking block improvements** - Better UI with Brain icon
+
+### Files Created/Modified
+
+**New Files:**
+- `hooks/useSmartScroll.ts` - Smart auto-scroll hook
+- `lib/tool-icons.ts` - Tool icon mapping and categorization
+- `components/chat/ScrollToBottomButton.tsx` - Scroll button component
+
+**Modified Files:**
+- `InlineToolCall.tsx` - Complete redesign with status states, icons, collapsible result
+- `ThinkingBlock.tsx` - Better animation, streaming state with cursor
+- `MessageList.tsx` - Integrated smart scroll
+- `MessageItem.tsx` - Message entrance animations, streaming cursor
+- `tailwind.config.js` - Added status colors (amber/emerald/red)
+- `index.css` - Added CSS animations (shimmer, cursor blink)
+- `package.json` - Added framer-motion
 
 ---
 
@@ -459,10 +498,11 @@ const ToolResult = motion.pre;
 | File | Changes |
 |------|---------|
 | `InlineToolCall.tsx` | Complete redesign with status states, icons, collapsible result |
-| `MessageList.tsx` | Smart scroll, scroll-to-bottom button, message animations |
-| `ThinkingBlock.tsx` | Better animation, streaming state |
+| `MessageList.tsx` | Smart scroll hook, scroll-to-bottom button |
+| `MessageItem.tsx` | Message entrance animations |
+| `ThinkingBlock.tsx` | Better animation, streaming state with cursor |
 | `index.css` | New animations (shimmer, blink, fade) |
-| `ChatContext.tsx` | Optional: Add typewriter text handling |
+| `hooks/useSmartScroll.ts` | New hook for intelligent auto-scroll |
 | `package.json` | Optional: Add `framer-motion`, `lodash-es` |
 
 ---

@@ -318,4 +318,265 @@
       opacity: 0.5;
     }
   }
+
+  /* Streaming cursor blink */
+  .animate-cursor-blink {
+    animation: cursorBlink 0.8s step-end infinite;
+  }
+
+  @keyframes cursorBlink {
+    0%,
+    50% {
+      opacity: 1;
+    }
+    51%,
+    100% {
+      opacity: 0;
+    }
+  }
+
+  /* Shimmer loading effect */
+  .animate-shimmer {
+    animation: shimmer 1.5s ease-in-out infinite;
+    background: linear-gradient(
+      90deg,
+      oklch(0.97 0 0) 0%,
+      oklch(0.99 0 0) 50%,
+      oklch(0.97 0 0) 100%
+    );
+    background-size: 200% 100%;
+  }
+
+  @keyframes shimmer {
+    0% {
+      background-position: 200% 0;
+    }
+    100% {
+      background-position: -200% 0;
+    }
+  }
+
+  /* Smooth streaming text - optimized for performance */
+  .streaming-content {
+    contain: content;
+    will-change: contents;
+    /* Text naturally accumulates without animation - modern approach */
+    /* Only apply subtle fade to newly added content via React */
+    animation: none;
+  }
+
+  .streaming-cursor {
+    display: inline-block;
+    width: 2px;
+    height: 1em;
+    background-color: currentColor;
+    margin-left: 2px;
+    vertical-align: text-bottom;
+    animation: cursorBlink 0.8s step-end infinite;
+  }
+
+  /* Coral-colored streaming cursor */
+  .streaming-cursor-coral {
+    display: inline-block;
+    width: 2px;
+    height: 1em;
+    background-color: #ff6b6b;
+    margin-left: 2px;
+    vertical-align: text-bottom;
+    animation: cursorBlink 0.8s step-end infinite;
+  }
+
+  /* ===== Flowtoken-style Character Animation ===== */
+
+  /* Flowtoken animation keyframes */
+  @keyframes ft-fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes ft-slideUp {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes ft-blurIn {
+    0% {
+      opacity: 0;
+      filter: blur(10px);
+    }
+    100% {
+      opacity: 1;
+      filter: blur(0);
+    }
+  }
+
+  @keyframes ft-dropIn {
+    0% {
+      opacity: 0;
+      transform: translateY(-15px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes ft-wave {
+    0% {
+      opacity: 0;
+      transform: translateY(5px);
+    }
+    50% {
+      opacity: 1;
+      transform: translateY(-2px);
+    }
+    100% {
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes ft-highlight {
+    0% {
+      background-color: rgba(255, 200, 100, 0.5);
+    }
+    100% {
+      background-color: transparent;
+    }
+  }
+
+  /* Container for animated markdown during streaming */
+  .streaming-markdown {
+    contain: content;
+    will-change: contents;
+  }
+
+  /* Each animated character gets this class */
+  .char-animated,
+  .char-sp,
+  .ft-char,
+  .fc {
+    display: inline;
+    animation: charFadeInUp 0.8s ease-in-out both;
+  }
+
+  /* Fade in up animation - inspired by Flowtoken */
+  @keyframes charFadeInUp {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Alternative animations (Flowtoken provides these) */
+
+  /* Blur in effect */
+  .char-animated-blur {
+    animation: charBlurIn 0.8s ease-in-out both;
+  }
+
+  @keyframes charBlurIn {
+    from {
+      opacity: 0;
+      filter: blur(8px);
+    }
+    to {
+      opacity: 1;
+      filter: blur(0);
+    }
+  }
+
+  /* Drop in effect */
+  .char-animated-drop {
+    animation: charDropIn 0.8s ease-in-out both;
+  }
+
+  @keyframes charDropIn {
+    from {
+      opacity: 0;
+      transform: translateY(-12px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Wave effect */
+  .char-animated-wave {
+    animation: charWave 0.8s ease-in-out both;
+  }
+
+  @keyframes charWave {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    25% {
+      transform: translateY(-3px);
+    }
+    50% {
+      transform: translateY(0);
+    }
+    75% {
+      transform: translateY(3px);
+    }
+  }
+
+  /* Highlight effect */
+  .char-animated-highlight {
+    animation: charHighlight 0.8s ease-in-out both;
+  }
+
+  @keyframes charHighlight {
+    from {
+      background-color: rgba(255, 107, 107, 0.3);
+    }
+    to {
+      background-color: transparent;
+    }
+  }
+
+  /* For completed messages - fade in the whole block */
+  .animate-fade-in-up {
+    animation: smoothFadeInUp 0.8s ease-in-out;
+  }
+
+  @keyframes smoothFadeInUp {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Spinner rotation */
+  .animate-spin-slow {
+    animation: spin 1.5s linear infinite;
+  }
+
+  @keyframes spin {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
 }

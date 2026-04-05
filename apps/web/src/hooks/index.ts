@@ -14,6 +14,9 @@ export { useChatStream } from './useChatStream';
 export { useChatActions } from './useChatActions';
 export { useChatSender } from './useChatSender';
 
+// UI
+export { useSmartScroll } from './useSmartScroll';
+
 // Workspaces
 export { useWorkspaces, useCreateWorkspace, workspaceKeys } from './useWorkspaces';
 

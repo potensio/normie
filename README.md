@@ -1,5 +1,5 @@
 <p align="center">
-  <h1 align="center">Open Claude Cowork</h1>
+  <h1 align="center">Come hang with Claude 🤙</h1>
 </p>
 
 <p align="center">
@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="https://platform.composio.dev?utm_source=github&utm_medium=gif&utm_campaign=2101&utm_content=open-claude-cowork">
-    <img src="open-claude-cowork.gif" alt="Open Claude Cowork Demo" width="800">
+    <img src="open-claude-cowork.gif" alt="Come hang with Claude Demo" width="800">
   </a>
 </p>
 
@@ -49,7 +49,7 @@
 
 ## Quick Start
 
-### Open Claude Cowork
+### Come hang with Claude 🤙
 
 ```bash
 git clone https://github.com/ComposioHQ/open-claude-cowork.git
@@ -70,7 +70,7 @@ npm start
 
 ## Features
 
-### Open Claude Cowork
+### Come hang with Claude 🤙
 - **Multi-Provider Support** - Claude Agent SDK or Opencode for different models
 - **Persistent Sessions** - Context maintained across messages
 - **Real-time Streaming** - Token-by-token response display

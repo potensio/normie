@@ -1,7 +1,13 @@
 /**
- * useChatStream - Streaming logic for chat messages
- * 
- * Handles SSE parsing, message accumulation, tool calls, and abort.
+ * useChatStream - Simple streaming without over-engineering
+ *
+ * REALITY CHECK:
+ * ChatGPT, Claude.ai, etc. achieve smooth streaming because:
+ * 1. Their backends send small, frequent chunks (1-10 chars at a time)
+ * 2. They use simple React rendering - no fancy tricks
+ * 3. The "smoothness" is from consistent chunk timing, not frontend magic
+ *
+ * If your backend sends big chunks infrequently, NO frontend trick will help.
  */
 import { useState, useRef, useCallback } from 'react';
 import type { Message, ToolCall, Todo, InlineToolCall, Provider } from '@normie/types';
@@ -118,7 +124,7 @@ export function useChatStream(): UseChatStreamReturn {
           if (done) break;
           if (!value) continue;
 
-          // Parse SSE data (value is already a string)
+          // Parse SSE data
           const lines = value.split('\n');
           for (const line of lines) {
             if (line.startsWith(':')) continue;
@@ -132,23 +138,17 @@ export function useChatStream(): UseChatStreamReturn {
                   if (data.content) {
                     if (data.isReasoning) {
                       fullReasoning += data.content;
-                      setMessages((prev) =>
-                        prev.map((m) =>
-                          m.id === assistantMessageId
-                            ? { ...m, reasoning: fullReasoning }
-                            : m,
-                        ),
-                      );
                     } else {
                       fullContent += data.content;
-                      setMessages((prev) =>
-                        prev.map((m) =>
-                          m.id === assistantMessageId
-                            ? { ...m, content: fullContent }
-                            : m,
-                        ),
-                      );
                     }
+                    // Simple React update - this is how most apps do it
+                    setMessages((prev) =>
+                      prev.map((m) =>
+                        m.id === assistantMessageId
+                          ? { ...m, content: fullContent, reasoning: fullReasoning }
+                          : m
+                      )
+                    );
                   }
                   break;
 
@@ -184,8 +184,8 @@ export function useChatStream(): UseChatStreamReturn {
                                 inlineToolCall,
                               ],
                             }
-                          : m,
-                      ),
+                          : m
+                      )
                     );
 
                     if (data.name === 'TodoWrite' && data.input?.todos) {
@@ -206,8 +206,8 @@ export function useChatStream(): UseChatStreamReturn {
                         prev.map((t) =>
                           t.id === localId
                             ? { ...t, status: 'success', result: data.result }
-                            : t,
-                        ),
+                            : t
+                        )
                       );
 
                       setMessages((prev) =>
@@ -223,11 +223,11 @@ export function useChatStream(): UseChatStreamReturn {
                                           status: 'success',
                                           result: data.result,
                                         }
-                                      : t,
+                                      : t
                                   ) || [],
                               }
-                            : m,
-                        ),
+                            : m
+                        )
                       );
 
                       pendingToolCalls.delete(apiToolId);
@@ -244,18 +244,19 @@ export function useChatStream(): UseChatStreamReturn {
           }
         }
 
-        // Final update - clean up empty fields
+        // Final update
         setMessages((prev) =>
           prev.map((m) => {
             if (m.id !== assistantMessageId) return m;
             return {
               ...m,
-              reasoning: m.reasoning || undefined,
+              content: fullContent,
+              reasoning: fullReasoning || undefined,
               inlineToolCalls: m.inlineToolCalls?.length
                 ? m.inlineToolCalls
                 : undefined,
             };
-          }),
+          })
         );
 
         return { chatId, chatTitle };
@@ -271,8 +272,8 @@ export function useChatStream(): UseChatStreamReturn {
                     m.content +
                     `\n\n[Error: ${error instanceof Error ? error.message : 'Unknown error'}]`,
                 }
-              : m,
-          ),
+              : m
+          )
         );
 
         return null;
@@ -280,7 +281,7 @@ export function useChatStream(): UseChatStreamReturn {
         setIsStreaming(false);
       }
     },
-    [isStreaming],
+    [isStreaming]
   );
 
   return {

@@ -39,7 +39,7 @@ function App() {
             <div className="mb-8">
               <div className="flex flex-col items-center gap-2">
                 <h1 className="font-serif text-[42px] font-normal text-zinc-950 tracking-tight">
-                  Open Claude Cowork
+                  Come hang with Claude 🤙
                 </h1>
                 <p className="text-sm text-zinc-600 mt-1 tracking-wide font-light">
                   Powered by Claude Code and Composio
