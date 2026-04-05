@@ -83,7 +83,7 @@ const CodeBlock = memo(function CodeBlock({ language, code }: CodeBlockProps) {
           customStyle={{
             margin: 0,
             padding: "1rem",
-            fontSize: "0.875rem",
+            fontSize: "0.8125rem", /* 13px - slightly smaller for code */
             lineHeight: "1.6",
             background: "#ffffff",
           }}
@@ -122,13 +122,13 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
-          // Headings with anchor IDs
+          // Headings with anchor IDs - Compact scale
           h1: ({ children, ...props }) => {
             const id = generateHeadingId(children);
             return (
               <h1
                 id={id}
-                className="text-2xl font-medium leading-tight mt-6 mb-3 text-zinc-900 tracking-tight"
+                className="text-[1.375rem] font-semibold leading-tight mt-6 mb-3 text-zinc-900 tracking-tight"
                 {...props}
               >
                 {children}
@@ -140,7 +140,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
             return (
               <h2
                 id={id}
-                className="text-xl font-medium leading-tight mt-5 mb-3 text-zinc-900 tracking-tight border-b border-zinc-200 pb-2"
+                className="text-[1.25rem] font-semibold leading-tight mt-5 mb-3 text-zinc-900 tracking-tight border-b border-zinc-200 pb-2"
                 {...props}
               >
                 {children}
@@ -152,7 +152,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
             return (
               <h3
                 id={id}
-                className="text-lg font-medium leading-tight mt-4 mb-2 text-zinc-900 tracking-tight"
+                className="text-[1.125rem] font-medium leading-tight mt-4 mb-2 text-zinc-900 tracking-tight"
                 {...props}
               >
                 {children}
@@ -161,7 +161,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
           },
           h4: ({ children, ...props }) => (
             <h4
-              className="text-base font-medium leading-tight mt-4 mb-2 text-zinc-900"
+              className="text-[1.0625rem] font-medium leading-tight mt-4 mb-2 text-zinc-900"
               {...props}
             >
               {children}
@@ -169,7 +169,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
           ),
           h5: ({ children, ...props }) => (
             <h5
-              className="text-sm font-medium leading-tight mt-3 mb-2 text-zinc-900"
+              className="text-base font-medium leading-tight mt-3 mb-2 text-zinc-900"
               {...props}
             >
               {children}
@@ -177,24 +177,24 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
           ),
           h6: ({ children, ...props }) => (
             <h6
-              className="text-xs font-medium leading-tight mt-3 mb-2 text-zinc-500 uppercase tracking-wider"
+              className="text-[0.9375rem] font-semibold leading-tight mt-3 mb-2 text-zinc-500 uppercase tracking-wider"
               {...props}
             >
               {children}
             </h6>
           ),
 
-          // Paragraphs - light weight as base
+          // Paragraphs - 15px base, light weight
           p: ({ children, ...props }) => (
             <p
-              className="my-3 text-sm leading-[1.7] text-text-primary font-light"
+              className="my-3 text-[0.9375rem] leading-[1.7] text-text-primary font-light"
               {...props}
             >
               {children}
             </p>
           ),
 
-          // Lists - consistent with paragraph styling
+          // Lists - consistent with paragraph
           ul: ({ children, ...props }) => (
             <ul className="my-3 pl-5 list-disc space-y-1.5" {...props}>
               {children}
@@ -207,7 +207,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
           ),
           li: ({ children, ...props }) => (
             <li
-              className="text-sm leading-[1.7] text-text-primary marker:text-text-tertiary font-light"
+              className="text-[0.9375rem] leading-[1.7] text-text-primary marker:text-text-tertiary font-light"
               {...props}
             >
               {children}

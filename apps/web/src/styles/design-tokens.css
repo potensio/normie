@@ -55,15 +55,15 @@
     "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-accent: "Playfair Display", Georgia, serif;
 
-  /* Typography - Sizes */
-  --text-xs: 0.765625rem; /* 12.25px */
-  --text-sm: 0.875rem; /* 14px */
-  --text-base: 1.09375rem; /* 17.5px */
-  --text-lg: 1.3125rem; /* 21px */
-  --text-xl: 1.96875rem; /* 31.5px */
-  --text-2xl: 2.625rem; /* 42px */
-  --text-3xl: 3.28125rem; /* 52.5px */
-  --text-4xl: 5.25rem; /* 84px */
+  /* Typography - Sizes (Compact scale, base: 15px) */
+  --text-xs: 0.75rem;      /* 12px - fine print */
+  --text-sm: 0.8125rem;    /* 13px - small labels */
+  --text-base: 0.9375rem;  /* 15px - body text */
+  --text-md: 1rem;         /* 16px - h5 */
+  --text-lg: 1.0625rem;    /* 17px - h4 */
+  --text-xl: 1.125rem;     /* 18px - h3 */
+  --text-2xl: 1.25rem;     /* 20px - h2 */
+  --text-3xl: 1.375rem;    /* 22px - h1 */
 
   /* Typography - Line Heights */
   --leading-tight: 1em;
