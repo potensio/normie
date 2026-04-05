@@ -13,8 +13,11 @@
     "db:migrate": "drizzle-kit migrate"
   },
   "dependencies": {
-    "@normie/types": "workspace:*",
     "@anthropic-ai/claude-agent-sdk": "^0.2.7",
+    "@mariozechner/pi-agent-core": "^0.65.0",
+    "@mariozechner/pi-ai": "^0.65.0",
+    "@mariozechner/pi-coding-agent": "^0.65.0",
+    "@normie/types": "workspace:*",
     "@opencode-ai/sdk": "latest",
     "bcrypt": "^6.0.0",
     "cookie-parser": "^1.4.7",

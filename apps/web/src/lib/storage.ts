@@ -1,9 +1,9 @@
 /**
- * LocalStorage helper utilities with validation.
+ * LocalStorage helper utilities.
  * Centralizes all localStorage access for the frontend.
  */
 import type { Provider } from '@normie/types';
-import { DEFAULT_PROVIDER, isValidModel, getDefaultModel } from '@/lib/constants';
+import { DEFAULT_PROVIDER, DEFAULT_MODEL } from '@/lib/constants';
 
 /**
  * Storage keys as constants for type-safe access.
@@ -15,33 +15,24 @@ export const STORAGE_KEYS = {
 } as const;
 
 /**
- * Valid provider values for validation.
+ * Checks if a value is a non-empty string.
  */
-const VALID_PROVIDERS: Provider[] = ['claude', 'opencode', 'kimi', 'bedrock'];
-
-/**
- * Checks if a value is a valid provider.
- */
-function isValidProvider(value: string | null): value is Provider {
-  return value !== null && VALID_PROVIDERS.includes(value as Provider);
+function isNonEmptyString(value: string | null): value is string {
+  return value !== null && value.length > 0;
 }
 
 /**
  * Gets the preferred provider from localStorage.
- * Returns 'claude' as default. Clears invalid values.
+ * Returns DEFAULT_PROVIDER as default.
  */
 export function getPreferredProvider(): Provider {
   const stored = localStorage.getItem(STORAGE_KEYS.PREFERRED_PROVIDER);
   
-  if (!isValidProvider(stored)) {
-    // Clear invalid value
-    if (stored !== null) {
-      localStorage.removeItem(STORAGE_KEYS.PREFERRED_PROVIDER);
-    }
-    return DEFAULT_PROVIDER;
+  if (isNonEmptyString(stored)) {
+    return stored as Provider;
   }
   
-  return stored;
+  return DEFAULT_PROVIDER;
 }
 
 /**
@@ -52,24 +43,17 @@ export function setPreferredProvider(provider: Provider): void {
 }
 
 /**
- * Gets the preferred model for a provider from localStorage.
- * Returns the default model for the provider if invalid or missing.
- * Clears invalid values.
+ * Gets the preferred model from localStorage.
+ * Returns DEFAULT_MODEL as default.
  */
-export function getPreferredModel(provider: Provider): string {
+export function getPreferredModel(): string {
   const stored = localStorage.getItem(STORAGE_KEYS.PREFERRED_MODEL);
   
-  // Validate that stored model exists for the given provider
-  if (stored && isValidModel(provider, stored)) {
+  if (isNonEmptyString(stored)) {
     return stored;
   }
   
-  // Clear invalid value
-  if (stored !== null) {
-    localStorage.removeItem(STORAGE_KEYS.PREFERRED_MODEL);
-  }
-  
-  return getDefaultModel(provider);
+  return DEFAULT_MODEL;
 }
 
 /**

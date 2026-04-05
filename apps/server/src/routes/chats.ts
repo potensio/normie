@@ -3,6 +3,11 @@ import { eq, and, desc } from 'drizzle-orm';
 import { requireAuth, requireWorkspaceAccess } from '../auth/index.js';
 import { getDb } from '../db/index.js';
 import * as schema from '../db/schema.js';
+import {
+  getValidatedModel,
+  NormieSessionManager,
+  getEnabledProviders,
+} from '../pi/index.js';
 
 const router = Router();
 
@@ -20,9 +25,14 @@ interface UpdateChatBody {
   model?: string;
 }
 
-interface UpdateSessionBody {
-  sessionId?: string;
-  sessionProvider?: string;
+interface SwitchModelBody {
+  provider: string;
+  model: string;
+}
+
+interface CreateBranchBody {
+  branchFromMessageId: string;
+  title?: string;
 }
 
 interface AddMessageBody {
@@ -43,8 +53,8 @@ router.get('/workspace/:workspaceId', requireWorkspaceAccess, async (req: Reques
       title: schema.chats.title,
       provider: schema.chats.provider,
       model: schema.chats.model,
-      sessionId: schema.chats.sessionId,
-      sessionProvider: schema.chats.sessionProvider,
+      sessionFilePath: schema.chats.sessionFilePath,
+      parentChatId: schema.chats.parentChatId,
       createdAt: schema.chats.createdAt,
       updatedAt: schema.chats.updatedAt
     })
@@ -85,8 +95,8 @@ router.post('/workspace/:workspaceId', requireWorkspaceAccess, async (req: Reque
         title: schema.chats.title,
         provider: schema.chats.provider,
         model: schema.chats.model,
-        sessionId: schema.chats.sessionId,
-        sessionProvider: schema.chats.sessionProvider,
+        sessionFilePath: schema.chats.sessionFilePath,
+        parentChatId: schema.chats.parentChatId,
         createdAt: schema.chats.createdAt
       });
 
@@ -200,13 +210,23 @@ router.patch('/:chatId', async (req: Request, res: Response) => {
 });
 
 // ============================================
-// UPDATE CHAT SESSION
+// SWITCH MODEL (Pi Agent)
 // ============================================
-router.patch('/:chatId/session', async (req: Request, res: Response) => {
+router.patch('/:chatId/model', async (req: Request, res: Response) => {
   try {
     const chatId = req.params.chatId as string;
-    const { sessionId, sessionProvider } = req.body as UpdateSessionBody;
+    const { provider, model } = req.body as SwitchModelBody;
     const db = getDb();
+
+    if (!provider || !model) {
+      return res.status(400).json({ error: 'Provider and model are required' });
+    }
+
+    // Validate provider/model
+    const validatedModel = getValidatedModel(provider, model);
+    if (!validatedModel) {
+      return res.status(400).json({ error: `Invalid provider/model: ${provider}/${model}` });
+    }
 
     // Get chat and verify ownership
     const [chat] = await db.select()
@@ -237,21 +257,165 @@ router.patch('/:chatId/session', async (req: Request, res: Response) => {
 
     const [updated] = await db.update(schema.chats)
       .set({ 
-        sessionId, 
-        sessionProvider,
+        provider, 
+        model,
         updatedAt: new Date() 
       })
       .where(eq(schema.chats.id, chat.id))
       .returning({
         id: schema.chats.id,
-        sessionId: schema.chats.sessionId,
-        sessionProvider: schema.chats.sessionProvider
+        provider: schema.chats.provider,
+        model: schema.chats.model,
+        updatedAt: schema.chats.updatedAt
       });
 
     res.json(updated);
   } catch (err) {
-    console.error('[CHAT] Update session error:', err);
-    res.status(500).json({ error: 'Failed to update session' });
+    console.error('[CHAT] Switch model error:', err);
+    res.status(500).json({ error: 'Failed to switch model' });
+  }
+});
+
+// ============================================
+// CREATE BRANCH (Pi Agent)
+// ============================================
+router.post('/:chatId/branch', async (req: Request, res: Response) => {
+  try {
+    const chatId = req.params.chatId as string;
+    const { branchFromMessageId, title } = req.body as CreateBranchBody;
+    const db = getDb();
+
+    if (!branchFromMessageId) {
+      return res.status(400).json({ error: 'branchFromMessageId is required' });
+    }
+
+    // Get parent chat
+    const [parentChat] = await db.select()
+      .from(schema.chats)
+      .where(eq(schema.chats.id, chatId));
+
+    if (!parentChat) {
+      return res.status(404).json({ error: 'Chat not found' });
+    }
+
+    // Verify access
+    const [workspace] = await db.select()
+      .from(schema.workspaces)
+      .where(eq(schema.workspaces.id, parentChat.workspaceId));
+
+    if (workspace.ownerId !== req.userId) {
+      const [membership] = await db.select()
+        .from(schema.workspaceMembers)
+        .where(and(
+          eq(schema.workspaceMembers.workspaceId, workspace.id),
+          eq(schema.workspaceMembers.userId, req.userId!)
+        ));
+      
+      if (!membership) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+    }
+
+    // Create branch session
+    const branchSession = await NormieSessionManager.createBranch(
+      {
+        workspaceId: parentChat.workspaceId,
+        chatId: parentChat.id,
+      },
+      branchFromMessageId,
+    );
+
+    // Create new chat record for branch
+    const [branchChat] = await db.insert(schema.chats)
+      .values({
+        workspaceId: parentChat.workspaceId,
+        userId: req.userId!,
+        title: title || `${parentChat.title} (branch)`,
+        provider: parentChat.provider,
+        model: parentChat.model,
+        parentChatId: parentChat.id,
+        branchPointMessageId: branchFromMessageId,
+        sessionFilePath: branchSession.getSessionFilePath(),
+      })
+      .returning();
+
+    res.json(branchChat);
+  } catch (err) {
+    console.error('[CHAT] Branch creation error:', err);
+    res.status(500).json({ error: 'Failed to create branch' });
+  }
+});
+
+// ============================================
+// GET CONVERSATION TREE (Pi Agent)
+// ============================================
+router.get('/:chatId/tree', async (req: Request, res: Response) => {
+  try {
+    const chatId = req.params.chatId as string;
+    const db = getDb();
+
+    // Get root chat
+    const [rootChat] = await db.select()
+      .from(schema.chats)
+      .where(eq(schema.chats.id, chatId));
+
+    if (!rootChat) {
+      return res.status(404).json({ error: 'Chat not found' });
+    }
+
+    // Verify access
+    const [workspace] = await db.select()
+      .from(schema.workspaces)
+      .where(eq(schema.workspaces.id, rootChat.workspaceId));
+
+    if (workspace.ownerId !== req.userId) {
+      const [membership] = await db.select()
+        .from(schema.workspaceMembers)
+        .where(and(
+          eq(schema.workspaceMembers.workspaceId, workspace.id),
+          eq(schema.workspaceMembers.userId, req.userId!)
+        ));
+      
+      if (!membership) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+    }
+
+    // Build tree recursively
+    const buildChatTree = async (chatId: string): Promise<any> => {
+      const [chat] = await db.select()
+        .from(schema.chats)
+        .where(eq(schema.chats.id, chatId));
+
+      if (!chat) return null;
+
+      // Get child branches
+      const branches = await db.select()
+        .from(schema.chats)
+        .where(eq(schema.chats.parentChatId, chatId))
+        .orderBy(schema.chats.createdAt);
+
+      // Recursively build tree for each branch
+      const branchTrees = await Promise.all(
+        branches.map((branch) => buildChatTree(branch.id)),
+      );
+
+      return {
+        id: chat.id,
+        title: chat.title,
+        provider: chat.provider,
+        model: chat.model,
+        branchPointMessageId: chat.branchPointMessageId,
+        createdAt: chat.createdAt,
+        branches: branchTrees.filter(Boolean),
+      };
+    };
+
+    const tree = await buildChatTree(rootChat.id);
+    res.json({ root: tree });
+  } catch (err) {
+    console.error('[CHAT] Tree retrieval error:', err);
+    res.status(500).json({ error: 'Failed to get conversation tree' });
   }
 });
 

@@ -15,7 +15,7 @@ export {
   useChatNavigation, 
   useChatDelete, 
   useChatSender,
-  chatKeys 
+  chatKeys
 } from './useChats';
 export { useChatStream } from './useChatStream';
 
@@ -27,3 +27,6 @@ export { useWorkspaces, useCreateWorkspace, workspaceKeys } from './useWorkspace
 
 // Preferences
 export { usePreferences } from './usePreferences';
+
+// Providers
+export { useProviders, providerKeys, type ModelOption, type UseProvidersReturn } from './useProviders';

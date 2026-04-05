@@ -1,12 +1,13 @@
 /**
  * ChatInputContainer - Container component
  * 
- * Connects to context and passes data to presentational ChatInput.
+ * Connects to context and fetches providers, passes data to presentational ChatInput.
  */
-import { useMemo } from 'react';
+
+import { useEffect, useMemo } from 'react';
 import { useChat } from '@/contexts/ChatContext';
 import { ChatInput } from './ChatInput';
-import { PROVIDER_MODELS, PROVIDER_LABELS } from '@/lib/constants';
+import { useProviders, type ModelOption } from '@/hooks/useProviders';
 import type { Provider } from '@normie/types';
 
 export function ChatInputContainer({ variant = "chat" }: { variant?: "home" | "chat" }) {
@@ -20,30 +21,59 @@ export function ChatInputContainer({ variant = "chat" }: { variant?: "home" | "c
     setModel,
   } = useChat();
 
-  // Get available providers and models
-  const providers: Provider[] = useMemo(() => 
-    Object.keys(PROVIDER_MODELS) as Provider[],
-    []
-  );
+  // Fetch providers from API
+  const { providers, isLoading, getModelsForProvider } = useProviders();
 
-  const models = useMemo(() => 
-    PROVIDER_MODELS[selectedProvider] || [],
-    [selectedProvider]
-  );
+  // Get models for current provider
+  const models: ModelOption[] = useMemo(() => {
+    return getModelsForProvider(selectedProvider);
+  }, [selectedProvider, getModelsForProvider]);
 
+  // Build provider list and labels from API response
+  const providerList = useMemo(() => {
+    return providers.map(p => p.id as Provider);
+  }, [providers]);
+
+  const providerLabels = useMemo(() => {
+    return Object.fromEntries(providers.map(p => [p.id, p.name]));
+  }, [providers]);
+
+  // Ensure selected model is valid for the provider when models load
+  useEffect(() => {
+    if (!isLoading && models.length > 0) {
+      const modelExists = models.some(m => m.value === selectedModel);
+      if (!modelExists) {
+        // Pick first model or default
+        const firstModel = models[0]?.value || selectedModel;
+        setModel(firstModel);
+      }
+    }
+  }, [isLoading, models, selectedModel, setModel]);
+
+  // Handle loading state - show minimal UI
+  if (isLoading && providers.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-16 text-sm text-zinc-400">
+        Loading providers...
+      </div>
+    );
+  }
+
+  // On error, fallback providers will still be used (from useProviders)
   return (
     <ChatInput
       variant={variant}
       selectedProvider={selectedProvider}
       selectedModel={selectedModel}
-      providers={providers}
+      providers={providerList}
       models={models}
-      providerLabels={PROVIDER_LABELS}
+      providerLabels={providerLabels}
       onSelectProvider={setProvider}
       onSelectModel={setModel}
       onSend={sendMessage}
       onStop={stopStreaming}
       isStreaming={isStreaming}
+      isLoadingProviders={isLoading}
     />
   );
 }

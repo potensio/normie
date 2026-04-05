@@ -124,6 +124,8 @@ export const workspaceFiles = pgTable('workspace_files', {
 // ============================================
 // CHATS
 // ============================================
+// Note: Self-referential FK for parentChatId is handled via raw SQL in migration
+// because Drizzle has issues with self-referencing in the table definition
 export const chats = pgTable('chats', {
   id: uuid('id').primaryKey().defaultRandom(),
   workspaceId: uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
@@ -131,14 +133,23 @@ export const chats = pgTable('chats', {
   title: varchar('title', { length: 255 }),
   provider: varchar('provider', { length: 50 }).notNull(),
   model: varchar('model', { length: 100 }),
-  sessionId: varchar('session_id', { length: 255 }),
-  sessionProvider: varchar('session_provider', { length: 50 }),
+  
+  // Session file path for Pi Agent JSONL session
+  sessionFilePath: text('session_file_path'),
+  
+  // Branch tracking for conversation branching
+  // Note: FK constraint added via migration, not here due to self-reference
+  parentChatId: uuid('parent_chat_id'),
+  branchPointMessageId: text('branch_point_message_id'),
+  
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   metadata: jsonb('metadata').default({}).$type<Record<string, unknown>>()
 }, (table) => [
   index('idx_chats_workspace').on(table.workspaceId),
-  index('idx_chats_user_updated').on(table.userId, table.updatedAt)
+  index('idx_chats_user_updated').on(table.userId, table.updatedAt),
+  index('idx_chats_parent_chat_id').on(table.parentChatId),
+  index('idx_chats_session_file_path').on(table.sessionFilePath)
 ]);
 
 // ============================================
@@ -280,6 +291,15 @@ export const chatsRelations = relations(chats, ({ many, one }) => ({
   user: one(users, {
     fields: [chats.userId],
     references: [users.id]
+  }),
+  // Self-referential relation for conversation branches
+  parentChat: one(chats, {
+    fields: [chats.parentChatId],
+    references: [chats.id],
+    relationName: 'chatBranches'
+  }),
+  branches: many(chats, {
+    relationName: 'chatBranches'
   }),
   messages: many(messages)
 }));
