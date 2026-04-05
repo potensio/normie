@@ -9,12 +9,14 @@ import { ScrollToBottomButton } from "./ScrollToBottomButton";
 interface MessageListProps {
   messages: Message[];
   isStreaming: boolean;
+  chatId?: string;
 }
 
-export function MessageList({ messages, isStreaming }: MessageListProps) {
+export function MessageList({ messages, isStreaming, chatId }: MessageListProps) {
   // Smart scroll - only auto-scrolls when user is near bottom
+  // Also scrolls to bottom when chatId changes (switching conversations)
   const { containerRef, bottomRef, showScrollButton, scrollToBottom } =
-    useSmartScroll([messages, isStreaming]);
+    useSmartScroll([messages, isStreaming], { chatId });
 
   // Check if last message is being streamed
   const isLastMessageStreaming =

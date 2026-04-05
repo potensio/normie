@@ -31,6 +31,12 @@ export default {
         "coral-dark": "#b5826c",
         "user-bubble": "#e8e8e3",
 
+        // Neon colors
+        neon: {
+          pink: "#ff2a6d",
+          "pink-glow": "#ff2a6d",
+        },
+
         // Status colors for tool calls and states
         status: {
           running: {

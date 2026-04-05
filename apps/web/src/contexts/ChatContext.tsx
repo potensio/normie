@@ -7,8 +7,7 @@
 import { createContext, useContext, useState, useCallback } from 'react';
 import type { Chat, Message, Provider, ToolCall, Todo, ThinkingMode } from '@normie/types';
 import { useAuth } from './AuthContext';
-import { useChats, usePreferences, useChatStream, useChatActions, useChatSender } from '@/hooks';
-import { setCurrentChatId } from '@/lib/storage';
+import { useChats, usePreferences, useChatStream, useChatActions, useChatSender, useCurrentChat, useChatNavigation } from '@/hooks';
 
 interface ChatContextType {
   // State
@@ -16,7 +15,9 @@ interface ChatContextType {
   currentChat: Chat | null;
   messages: Message[];
   isLoading: boolean;
+  isFetching: boolean;
   isStreaming: boolean;
+  error: Error | null;
   todos: Todo[];
   toolCalls: ToolCall[];
   selectedProvider: Provider;
@@ -25,7 +26,7 @@ interface ChatContextType {
 
   // Actions
   createNewChat: () => void;
-  loadChat: (chatId: string) => Promise<void>;
+  loadChat: (chatId: string) => void;
   deleteChat: (chatId: string) => Promise<void>;
   sendMessage: (content: string) => Promise<void>;
   stopStreaming: () => void;
@@ -33,6 +34,7 @@ interface ChatContextType {
   setModel: (model: string) => void;
   toggleThinkingMode: () => void;
   refreshChats: () => Promise<void>;
+  prefetchChat: (chatId: string) => void;
 }
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
@@ -42,6 +44,25 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
   // TanStack Query for chats list
   const { data: chats = [], refetch: refreshChats } = useChats(currentWorkspace?.id);
+
+  // NEW: Non-blocking chat navigation
+  const { currentChatId, navigateToChat, navigateToNewChat } = useChatNavigation();
+
+  // NEW: TanStack Query-powered chat loading (instant cached data + background refetch)
+  const {
+    chat: currentChat,
+    messages,
+    todos,
+    toolCalls,
+    isLoading: isLoadingChat,
+    isFetching: isFetchingChat,
+    error: chatError,
+    prefetchChat,
+  } = useCurrentChat({
+    workspaceId: currentWorkspace?.id,
+    chatId: currentChatId,
+    enabled: isLoggedIn,
+  });
 
   // Preferences
   const {
@@ -54,57 +75,75 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   // Thinking mode (simple local state)
   const [thinkingMode, setThinkingMode] = useState<ThinkingMode>('normal');
 
-  // Chat streaming
+  // Chat streaming (for new messages)
   const {
-    messages,
+    messages: streamMessages,
     isStreaming,
-    toolCalls,
-    todos,
+    toolCalls: streamToolCalls,
+    todos: streamTodos,
     sendMessage: sendStreamMessage,
     stopStreaming: stopStream,
-    loadMessages,
     reset: resetStream,
   } = useChatStream();
 
-  // Chat actions
-  const {
-    currentChat,
-    isLoading,
-    createNewChat,
-    loadChat,
-    deleteChat,
-    setCurrentChat,
-  } = useChatActions({
-    workspaceId: currentWorkspace?.id,
+  // Chat actions (only for delete - loading handled by TanStack Query)
+  const { deleteChat: deleteChatAction } = useChatActions({
     isLoggedIn,
-    chats,
-    isStreaming,
-    abortStreaming: () => stopStream(currentChat?.id || '', selectedProvider),
-    clearAuthState,
-    onChatLoaded: (chat) => loadMessages(chat),
-    reset: resetStream,
+    onDelete: () => {
+      // Navigate to new chat after delete if current was deleted
+      if (currentChatId) {
+        navigateToNewChat();
+      }
+    },
   });
 
-  // Chat sender (extracted orchestration logic)
-  const { sendMessage } = useChatSender({
+  // Combine messages: use stream messages when active, otherwise use loaded chat messages
+  const displayMessages = streamMessages.length > 0 ? streamMessages : messages;
+  const displayTodos = streamTodos.length > 0 ? streamTodos : (todos ?? []);
+  const displayToolCalls = streamToolCalls.length > 0 ? streamToolCalls : (toolCalls ?? []);
+
+  // Chat sender (for sending new messages)
+  const { sendMessage: sendChatMessage } = useChatSender({
     currentChat,
     workspaceId: currentWorkspace?.id,
     provider: selectedProvider,
     model: selectedModel,
     userId: user?.id,
-    messages,
-    todos,
-    toolCalls,
+    messages: displayMessages,
+    todos: displayTodos,
+    toolCalls: displayToolCalls,
     isStreaming,
     sendStreamMessage,
-    setCurrentChat,
+    setCurrentChat: () => {}, // No longer needed - TanStack Query handles this
   });
+
+  // Wrapped actions
+  const createNewChat = useCallback(() => {
+    resetStream();
+    navigateToNewChat();
+  }, [navigateToNewChat, resetStream]);
+
+  const loadChat = useCallback((chatId: string) => {
+    resetStream();
+    navigateToChat(chatId);
+  }, [navigateToChat, resetStream]);
+
+  const deleteChat = useCallback(
+    async (chatId: string) => {
+      await deleteChatAction(chatId);
+    },
+    [deleteChatAction]
+  );
+
+  const sendMessage = useCallback(async (content: string) => {
+    await sendChatMessage(content);
+  }, [sendChatMessage]);
 
   // Stop streaming wrapper
   const stopStreaming = useCallback(async () => {
-    if (!isStreaming || !currentChat) return;
-    await stopStream(currentChat.id, selectedProvider);
-  }, [isStreaming, currentChat, selectedProvider, stopStream]);
+    if (!isStreaming || !currentChatId) return;
+    await stopStream(currentChatId, selectedProvider);
+  }, [isStreaming, currentChatId, selectedProvider, stopStream]);
 
   // Provider/model setters
   const setProvider = useCallback((provider: Provider) => {
@@ -119,14 +158,21 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     setThinkingMode((prev) => (prev === 'normal' ? 'extended' : 'normal'));
   }, []);
 
+  // Combined loading state:
+  // - isLoading: true only on first load when no cached data (shows skeleton)
+  // - isFetching: true during any fetch including background refetch (subtle indicator)
+  const isLoading = isLoadingChat && !currentChat;
+
   const value: ChatContextType = {
     chats,
     currentChat,
-    messages,
+    messages: displayMessages,
     isLoading,
+    isFetching: isFetchingChat,
     isStreaming,
-    todos,
-    toolCalls,
+    error: chatError,
+    todos: displayTodos,
+    toolCalls: displayToolCalls,
     selectedProvider,
     selectedModel,
     thinkingMode,
@@ -141,6 +187,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     refreshChats: async () => {
       await refreshChats();
     },
+    prefetchChat,
   };
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;

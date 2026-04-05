@@ -15,20 +15,21 @@ import {
 interface ChatSidebarProps {
   // User data
   user: { displayName?: string; email: string } | null;
-  
+
   // Workspace data
   currentWorkspace: { id: string; name: string } | null;
   workspaces: { id: string; name: string }[];
   onSwitchWorkspace: (id: string) => void;
   onCreateWorkspace: (name: string, description?: string) => Promise<unknown>;
-  
+
   // Chat data
   chats: { id: string; title: string }[];
   currentChatId: string | null;
   onLoadChat: (id: string) => void;
   onCreateChat: () => void;
   onDeleteChat: (id: string) => void;
-  
+  onPrefetchChat?: (id: string) => void;
+
   // Settings
   onOpenSettings: () => void;
 }
@@ -44,6 +45,7 @@ export function ChatSidebar({
   onLoadChat,
   onCreateChat,
   onDeleteChat,
+  onPrefetchChat,
   onOpenSettings,
 }: ChatSidebarProps) {
   const [searchQuery, setSearchQuery] = useState("");
@@ -91,7 +93,9 @@ export function ChatSidebar({
   }, []);
 
   return (
-    <aside className="bg-white border-r border-zinc-200 p-4 pt-16 gap-3 flex-col w-[280px] flex-shrink-0 flex overflow-y-auto">
+    <aside className="relative bg-white border-r border-zinc-200 p-4 pt-16 gap-3 flex-col w-[280px] flex-shrink-0 flex overflow-y-auto">
+      {/* Draggable header area for macOS */}
+      <div className="absolute top-0 left-0 right-0 h-12 app-drag-region z-10" />
       {/* Workspace Selector */}
       <WorkspaceSelector
         currentWorkspace={currentWorkspace}
@@ -131,6 +135,7 @@ export function ChatSidebar({
           filteredChats.map((chat) => (
             <div
               key={chat.id}
+              onMouseEnter={() => onPrefetchChat?.(chat.id)}
               className={`group relative flex items-center gap-2 rounded-xl py-2 pl-3 pr-2 transition-colors ${
                 currentChatId === chat.id ? "bg-zinc-100" : "hover:bg-zinc-50"
               }`}

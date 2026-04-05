@@ -23,8 +23,10 @@ import apiKeyRoutes from './routes/api-keys.js';
 import memoryRoutes from './routes/memories.js';
 import integrationRoutes from './routes/integrations.js';
 import * as schema from './db/schema.js';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { buildFullContext } from './services/context-builder.js';
+import { generateConversationTitle } from './services/title-generator.js';
+import type { Provider } from '@normie/types';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -402,6 +404,43 @@ app.post('/api/chat', async (req, res) => {
         console.log('[CHAT] Saved assistant response to database');
       } catch (msgError) {
         console.error('[CHAT] Error saving assistant message:', msgError);
+      }
+
+      // Generate title after first exchange (2 messages: user + assistant)
+      try {
+        const messageCount = await db.select({ count: sql`count(*)` })
+          .from(schema.messages)
+          .where(eq(schema.messages.chatId, dbChatId));
+
+        if (messageCount[0].count === 2) {
+          console.log('[CHAT] First exchange complete, generating title...');
+
+          generateConversationTitle({
+            userMessage: message,
+            assistantResponse,
+            provider: providerName as Provider,
+            model: model ?? undefined,
+          }).then(async (title) => {
+            // Update chat title in database
+            await db.update(schema.chats)
+              .set({ title, updatedAt: new Date() })
+              .where(eq(schema.chats.id, dbChatId));
+
+            console.log('[CHAT] Title generated:', title);
+
+            // Emit title update via SSE if connection is still open
+            if (!res.writableEnded) {
+              res.write(`data: ${JSON.stringify({
+                type: 'title_update',
+                title
+              })}\n\n`);
+            }
+          }).catch((err) => {
+            console.error('[CHAT] Title generation failed:', err);
+          });
+        }
+      } catch (titleGenError) {
+        console.error('[CHAT] Error checking message count for title gen:', titleGenError);
       }
     }
 

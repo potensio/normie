@@ -4,7 +4,7 @@
  * Extracted from ChatContext to keep context stateless.
  * Handles the logic of sending a message and updating state.
  */
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { Chat, Message, Provider, Todo, ToolCall } from '@normie/types';
 import { chatKeys } from './useChats';
@@ -16,18 +16,23 @@ interface UseChatSenderParams {
   model: string;
   userId: string | undefined;
   messages: Message[];
-  todos: Todo[];
-  toolCalls: ToolCall[];
+  todos?: Todo[];
+  toolCalls?: ToolCall[];
   isStreaming: boolean;
-  sendStreamMessage: (params: {
-    content: string;
-    chatId: string;
-    chatTitle: string;
-    provider: Provider;
-    model: string;
-    workspaceId: string | null;
-    userId: string;
-  }) => Promise<{ chatId: string; chatTitle: string } | null>;
+  sendStreamMessage: (
+    params: {
+      content: string;
+      chatId: string;
+      chatTitle: string;
+      provider: Provider;
+      model: string;
+      workspaceId: string | null;
+      userId: string;
+    },
+    callbacks?: {
+      onTitleUpdate?: (title: string) => void;
+    }
+  ) => Promise<{ chatId: string; chatTitle: string } | null>;
   setCurrentChat: (chat: Chat | null) => void;
 }
 
@@ -51,6 +56,8 @@ export function useChatSender(params: UseChatSenderParams): UseChatSenderReturn 
   } = params;
 
   const queryClient = useQueryClient();
+  // Track the generated title for this conversation
+  const generatedTitleRef = useRef<string | null>(null);
 
   const sendMessage = useCallback(
     async (content: string) => {
@@ -61,15 +68,22 @@ export function useChatSender(params: UseChatSenderParams): UseChatSenderReturn 
         currentChat?.title ||
         (content.length > 30 ? content.substring(0, 30) + '...' : content);
 
-      const result = await sendStreamMessage({
-        content,
-        chatId,
-        chatTitle,
-        provider,
-        model,
-        workspaceId: workspaceId || null,
-        userId,
-      });
+      const result = await sendStreamMessage(
+        {
+          content,
+          chatId,
+          chatTitle,
+          provider,
+          model,
+          workspaceId: workspaceId || null,
+          userId,
+        },
+        {
+          onTitleUpdate: (title) => {
+            generatedTitleRef.current = title;
+          },
+        }
+      );
 
       if (result) {
         // Filter out error messages for final state
@@ -77,9 +91,12 @@ export function useChatSender(params: UseChatSenderParams): UseChatSenderReturn 
           !m.content.startsWith('[Error:')
         );
 
+        // Use the AI-generated title if available, otherwise fallback
+        const finalTitle = generatedTitleRef.current || result.chatTitle;
+
         const updatedChat: Chat = {
           id: result.chatId,
-          title: result.chatTitle,
+          title: finalTitle,
           provider,
           model,
           updatedAt: Date.now(),
@@ -89,6 +106,9 @@ export function useChatSender(params: UseChatSenderParams): UseChatSenderReturn 
         };
 
         setCurrentChat(updatedChat);
+
+        // Reset the generated title ref for next conversation
+        generatedTitleRef.current = null;
 
         // Refresh chat list from server
         queryClient.invalidateQueries({ queryKey: ['chats', 'list'] });

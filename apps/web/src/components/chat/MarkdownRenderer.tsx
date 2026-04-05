@@ -259,11 +259,12 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
             </blockquote>
           ),
 
-          // Links
+          // Links - Neon pink style
           a: ({ href, children, ...props }) => (
             <a
               href={href}
-              className="text-coral hover:underline underline-offset-2 decoration-coral/50"
+              className="hover:underline underline-offset-2"
+              style={{ color: "#ff2a6d", textDecorationColor: "rgba(255, 42, 109, 0.5)" }}
               target={href?.startsWith("http") ? "_blank" : undefined}
               rel={href?.startsWith("http") ? "noopener noreferrer" : undefined}
               {...props}

@@ -80,7 +80,11 @@ function App() {
               </div>
 
               {/* Messages */}
-              <MessageList messages={messages} isStreaming={isStreaming} />
+              <MessageList 
+                messages={messages} 
+                isStreaming={isStreaming} 
+                chatId={currentChat?.id}
+              />
 
               {/* Input */}
               <ChatInputContainer variant="chat" />

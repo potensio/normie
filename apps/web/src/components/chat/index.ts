@@ -16,6 +16,7 @@ export { ChatInput } from './ChatInput';
 // Message components (already presentational)
 export { MessageList } from './MessageList';
 export { MessageItem } from './MessageItem';
+export { LoadingMessages } from './LoadingMessages';
 
 // UI components
 export { ScrollToBottomButton } from './ScrollToBottomButton';

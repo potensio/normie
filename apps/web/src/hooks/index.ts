@@ -13,6 +13,8 @@ export { useChats, useChatDetail, useDeleteChat, chatKeys } from './useChats';
 export { useChatStream } from './useChatStream';
 export { useChatActions } from './useChatActions';
 export { useChatSender } from './useChatSender';
+export { useCurrentChat } from './useCurrentChat';
+export { useChatNavigation } from './useChatNavigation';
 
 // UI
 export { useSmartScroll } from './useSmartScroll';

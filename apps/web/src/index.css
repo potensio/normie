@@ -4,6 +4,32 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ============================================
+   Electron window drag regions
+   MUST come after @tailwind utilities to ensure
+   proper specificity and override base styles
+   ============================================ */
+
+.app-drag-region {
+  -webkit-app-region: drag !important;
+  app-region: drag !important;
+}
+
+/* Prevent dragging on interactive elements within draggable regions */
+.app-drag-region button,
+.app-drag-region input,
+.app-drag-region select,
+.app-drag-region a,
+.app-no-drag {
+  -webkit-app-region: no-drag !important;
+  app-region: no-drag !important;
+}
+
+/* macOS traffic light padding - accounts for the red/yellow/green buttons */
+.mac-traffic-light-padding {
+  padding-left: 80px;
+}
+
 @layer base {
   :root {
     --font-size: 16px;

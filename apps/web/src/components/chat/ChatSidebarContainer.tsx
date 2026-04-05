@@ -10,7 +10,7 @@ import { ChatSidebar } from './ChatSidebar';
 import { SettingsModal } from '../SettingsModal';
 
 export function ChatSidebarContainer() {
-  const { chats, currentChat, loadChat, createNewChat, deleteChat } = useChat();
+  const { chats, currentChat, loadChat, createNewChat, deleteChat, prefetchChat } = useChat();
   const { user, currentWorkspace, workspaces, switchWorkspace, createWorkspace } = useAuth();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
@@ -27,6 +27,7 @@ export function ChatSidebarContainer() {
         onLoadChat={loadChat}
         onCreateChat={createNewChat}
         onDeleteChat={deleteChat}
+        onPrefetchChat={prefetchChat}
         onOpenSettings={() => setIsSettingsOpen(true)}
       />
       

@@ -3,6 +3,7 @@
  *
  * Tracks user scroll intent and only auto-scrolls when appropriate.
  * Shows a "scroll to bottom" button when new content arrives while scrolled up.
+ * Automatically resets and scrolls to bottom when chatId changes.
  */
 import { useRef, useState, useEffect, useCallback } from 'react';
 
@@ -11,6 +12,8 @@ interface UseSmartScrollOptions {
   threshold?: number;
   /** Debounce delay in ms for scroll events */
   debounceMs?: number;
+  /** Chat ID - when changed, resets scroll state and scrolls to bottom */
+  chatId?: string | null;
 }
 
 interface UseSmartScrollReturn {
@@ -25,7 +28,7 @@ export function useSmartScroll(
   dependencies: unknown[],
   options: UseSmartScrollOptions = {}
 ): UseSmartScrollReturn {
-  const { threshold = 100, debounceMs = 50 } = options;
+  const { threshold = 100, debounceMs = 50, chatId } = options;
 
   const containerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -33,6 +36,7 @@ export function useSmartScroll(
   const [showScrollButton, setShowScrollButton] = useState(false);
   const lastScrollTop = useRef(0);
   const scrollTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastChatId = useRef<string | null | undefined>(chatId);
 
   // Handle scroll events to detect user intent
   useEffect(() => {
@@ -61,6 +65,16 @@ export function useSmartScroll(
     container.addEventListener('scroll', handleScroll, { passive: true });
     return () => container.removeEventListener('scroll', handleScroll);
   }, [threshold]);
+
+  // Reset scroll state when chatId changes (switching conversations)
+  useEffect(() => {
+    if (chatId !== lastChatId.current) {
+      lastChatId.current = chatId;
+      lastScrollTop.current = 0;
+      setShouldAutoScroll(true);
+      setShowScrollButton(false);
+    }
+  }, [chatId]);
 
   // Auto-scroll when dependencies change (e.g., messages update)
   useEffect(() => {
