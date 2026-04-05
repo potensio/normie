@@ -141,6 +141,8 @@
     color: var(--color-foreground);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: "cv11", "ss01";
+    font-variation-settings: "opsz" 32;
   }
 
   #root {
@@ -208,84 +210,15 @@
     @apply bg-gray-400;
   }
 
-  /* Markdown content styles */
-  .markdown-content {
-    @apply leading-relaxed;
+  /* Code block wrapper styles */
+  .code-block-wrapper {
+    @apply my-4;
   }
 
-  .markdown-content p {
-    @apply mb-3;
-  }
-
-  .markdown-content p:last-child {
-    @apply mb-0;
-  }
-
-  .markdown-content h1,
-  .markdown-content h2,
-  .markdown-content h3,
-  .markdown-content h4,
-  .markdown-content h5,
-  .markdown-content h6 {
-    @apply font-semibold leading-tight mt-5 mb-3;
-  }
-
-  .markdown-content h1:first-child,
-  .markdown-content h2:first-child,
-  .markdown-content h3:first-child {
-    @apply mt-0;
-  }
-
-  .markdown-content h1 {
-    @apply text-2xl;
-  }
-  .markdown-content h2 {
-    @apply text-xl;
-  }
-  .markdown-content h3 {
-    @apply text-lg;
-  }
-
-  .markdown-content ul,
-  .markdown-content ol {
-    @apply my-3 pl-6;
-  }
-
-  .markdown-content li {
-    @apply my-1;
-  }
-
-  .markdown-content code {
-    @apply font-mono text-sm bg-cream px-1.5 py-0.5 rounded;
-  }
-
+  /* Remove default pre/code background when using SyntaxHighlighter */
   .markdown-content pre {
-    @apply bg-cream p-4 rounded-lg overflow-x-auto my-3;
-  }
-
-  .markdown-content pre code {
-    @apply bg-transparent p-0;
-  }
-
-  .markdown-content blockquote {
-    @apply border-l-2 border-gray-300 pl-4 my-3 text-gray-600;
-  }
-
-  .markdown-content a {
-    @apply text-coral hover:underline;
-  }
-
-  .markdown-content table {
-    @apply w-full border-collapse my-3;
-  }
-
-  .markdown-content th,
-  .markdown-content td {
-    @apply border border-gray-200 px-3 py-2 text-left;
-  }
-
-  .markdown-content th {
-    @apply bg-cream font-medium;
+    @apply m-0;
+    background: transparent !important;
   }
 }
 
@@ -363,6 +296,24 @@
     /* Text naturally accumulates without animation - modern approach */
     /* Only apply subtle fade to newly added content via React */
     animation: none;
+  }
+
+  /* Subtle fade-in for streaming content updates */
+  .animate-fade-in-subtle {
+    animation: fadeInSubtle 0.3s ease-out;
+  }
+
+  @keyframes fadeInSubtle {
+    from {
+      opacity: 0.7;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  .streaming-markdown {
+    contain: content;
   }
 
   .streaming-cursor {

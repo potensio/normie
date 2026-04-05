@@ -13,9 +13,8 @@ interface MessageListProps {
 
 export function MessageList({ messages, isStreaming }: MessageListProps) {
   // Smart scroll - only auto-scrolls when user is near bottom
-  const { containerRef, bottomRef, showScrollButton, scrollToBottom } = useSmartScroll(
-    [messages, isStreaming]
-  );
+  const { containerRef, bottomRef, showScrollButton, scrollToBottom } =
+    useSmartScroll([messages, isStreaming]);
 
   // Check if last message is being streamed
   const isLastMessageStreaming =
@@ -25,26 +24,25 @@ export function MessageList({ messages, isStreaming }: MessageListProps) {
 
   return (
     <div className="relative flex-1 overflow-hidden">
-      <div
-        ref={containerRef}
-        className="h-full overflow-y-auto px-6 py-6 space-y-4"
-      >
-        {messages.map((message, index) => (
-          <MessageItem
-            key={message.id}
-            message={message}
-            isStreaming={
-              isLastMessageStreaming && index === messages.length - 1
-            }
-          />
-        ))}
-        <div ref={bottomRef} />
+      <div ref={containerRef} className="h-full overflow-y-auto px-6 py-6">
+        <div className="max-w-2xl mx-auto space-y-4">
+          {messages.map((message, index) => (
+            <MessageItem
+              key={message.id}
+              message={message}
+              isStreaming={
+                isLastMessageStreaming && index === messages.length - 1
+              }
+            />
+          ))}
+          <div ref={bottomRef} />
+        </div>
       </div>
-      
+
       {/* Scroll to bottom button */}
-      <ScrollToBottomButton 
-        visible={showScrollButton} 
-        onClick={scrollToBottom} 
+      <ScrollToBottomButton
+        visible={showScrollButton}
+        onClick={scrollToBottom}
       />
     </div>
   );

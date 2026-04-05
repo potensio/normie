@@ -22,3 +22,7 @@ export { ScrollToBottomButton } from './ScrollToBottomButton';
 
 // Streaming components
 export { AnimatedStream } from './AnimatedStream';
+export { StreamingText } from './StreamingText';
+
+// Markdown rendering
+export { MarkdownRenderer } from './MarkdownRenderer';

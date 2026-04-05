@@ -102,7 +102,7 @@ export function ChatInput({
             variant === "home" ? "Ask me to build something..." : "Reply..."
           }
           rows={1}
-          className="w-full bg-transparent border-none outline-none text-sm font-light text-zinc-900 placeholder-zinc-400 resize-none min-h-[60px]"
+          className="w-full bg-transparent border-none outline-none text-sm font-light text-zinc-900 placeholder-zinc-400 resize-none min-h-[60px] leading-relaxed"
         />
 
         <div className="flex items-center justify-between">

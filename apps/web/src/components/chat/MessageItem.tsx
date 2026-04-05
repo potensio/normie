@@ -1,6 +1,6 @@
 /**
  * MessageItem - Individual message rendering with animations
- * 
+ *
  * Streaming: Text accumulates via RAF-batched updates for smooth 60fps appearance.
  */
 import { useMemo, memo } from "react";
@@ -30,9 +30,9 @@ export const MessageItem = memo(function MessageItem({
         className="flex flex-col gap-1 items-end"
       >
         <div className="bg-zinc-100 px-4 py-2.5 rounded-2xl max-w-2xl">
-          <p className="text-sm font-light text-zinc-900">{message.content}</p>
+          <p className="text-sm font-light text-zinc-900 leading-relaxed">{message.content}</p>
         </div>
-        <span className="text-xs font-light text-zinc-400">2 min ago</span>
+        <span className="text-xs font-extralight text-zinc-400">Just now</span>
       </motion.div>
     );
   }
@@ -64,10 +64,7 @@ export const MessageItem = memo(function MessageItem({
       {/* Main Content - smooth streaming text */}
       {message.content && (
         <div className="space-y-3">
-          <AnimatedStream 
-            content={message.content}
-            isStreaming={isStreaming}
-          />
+          <AnimatedStream content={message.content} isStreaming={isStreaming} />
           {!isStreaming && (
             <span className="text-xs font-light text-zinc-400">Just now</span>
           )}
@@ -76,7 +73,7 @@ export const MessageItem = memo(function MessageItem({
 
       {/* Empty state when streaming starts - bouncing dots */}
       {isStreaming && !message.content && !message.reasoning && (
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           className="flex items-center gap-2 py-1"

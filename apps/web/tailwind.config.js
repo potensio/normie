@@ -92,15 +92,23 @@ export default {
         xl: "var(--radius-xl)",
       },
       fontFamily: {
-        sans: ["Inter", "-apple-system", "BlinkMacSystemFont", "sans-serif"],
+        sans: ["Inter", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "sans-serif"],
         serif: ['"EB Garamond"', "Georgia", "serif"],
-        mono: ['"SF Mono"', "Monaco", '"Cascadia Code"', "monospace"],
+        mono: ['"SF Mono"', "Monaco", '"Cascadia Code"', '"Roboto Mono"', "monospace"],
       },
       fontWeight: {
         light: "300",
         normal: "400",
         medium: "500",
         semibold: "600",
+      },
+      letterSpacing: {
+        tighter: "-0.05em",
+        tight: "-0.025em",
+        normal: "0",
+        wide: "0.025em",
+        wider: "0.05em",
+        widest: "0.1em",
       },
       boxShadow: {
         soft: "0 2px 8px rgba(0, 0, 0, 0.04)",
