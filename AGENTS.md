@@ -28,7 +28,7 @@ Normie is an Electron desktop application with a Node.js backend supporting mult
 | Layer | Tech |
 |-------|------|
 | Desktop | Electron 39 |
-| Frontend | React 18, TypeScript, Vite, Tailwind CSS |
+| Frontend | React 18, TypeScript, Vite, Tailwind CSS, TanStack Query |
 | Backend | Express 5, Node.js (ESM), TypeScript |
 | Database | PostgreSQL (Neon), pgvector, Drizzle ORM |
 | AI Providers | Claude SDK, Opencode, Kimi, Bedrock |
@@ -42,7 +42,7 @@ Normie is an Electron desktop application with a Node.js backend supporting mult
 ```
 normie/
 ├── electron/                 # Electron main process
-│   ├── src/main.ts          # Main process ( spawns backend)
+│   ├── src/main.ts          # Main process (spawns backend)
 │   └── src/preload.ts       # Preload script (auth API, chat API)
 ├── packages/
 │   ├── types/               # @normie/types - Shared TypeScript types
@@ -51,8 +51,14 @@ normie/
 │   ├── web/                 # @normie/web - Frontend (Vite + React)
 │   │   └── src/
 │   │       ├── components/
-│   │       ├── contexts/
+│   │       │   ├── chat/    # Chat-specific components (modular)
+│   │       │   └── ui/      # Reusable UI components
+│   │       ├── contexts/    # React contexts
+│   │       ├── hooks/       # Feature-based hooks
 │   │       ├── lib/
+│   │       │   ├── api/     # Typed API client layer
+│   │       │   └── storage.ts # LocalStorage helpers
+│   │       ├── styles/      # Design tokens, global CSS
 │   │       └── types/
 │   └── server/              # @normie/server - Backend (Express + TypeScript)
 │       ├── drizzle.config.ts # Drizzle Kit configuration
@@ -61,13 +67,198 @@ normie/
 │           ├── index.ts     # Main server entry
 │           ├── providers/   # AI providers (Claude, Opencode, Kimi, Bedrock)
 │           ├── routes/      # API routes
+│           │   ├── auth.ts
+│           │   ├── chats.ts
+│           │   ├── workspaces.ts
+│           │   ├── memories.ts
+│           │   ├── api-keys.ts
+│           │   └── integrations.ts  # Composio workspace integrations
 │           ├── services/    # Business logic
+│           │   ├── context-builder.ts
+│           │   ├── embeddings.ts
+│           │   ├── memory-search.ts
+│           │   └── title-generator.ts  # AI-powered chat titles
 │           ├── db/          # Database schema and connection
 │           ├── prompts/     # System prompts
 │           └── auth/        # Authentication module
 ├── .env
 └── package.json
 ```
+
+---
+
+## Frontend Architecture
+
+### API Client Layer (`/apps/web/src/lib/api/`)
+
+Centralized typed API client for all backend communication:
+
+```
+lib/api/
+├── client.ts      # Base fetch wrapper with auth + error handling
+├── auth.ts        # Auth API methods
+├── chat.ts        # Chat API methods
+├── workspace.ts   # Workspace API methods
+└── index.ts       # Barrel exports
+```
+
+**Usage:**
+```typescript
+import { chatApi } from '@/lib/api';
+
+const chats = await chatApi.list(workspaceId);
+```
+
+### Feature-Based Hooks (`/apps/web/src/hooks/`)
+
+Hooks organized by feature for better separation of concerns:
+
+| Hook | Purpose |
+|------|---------|
+| `useAuth` | Authentication state and actions |
+| `useChats` | Chat list management with TanStack Query |
+| `useChatStream` | Streaming chat messages |
+| `usePreferences` | Provider/model preferences |
+| `useSmartScroll` | Auto-scroll during streaming |
+| `useWorkspaces` | Workspace management |
+
+### Chat Components (`/apps/web/src/components/chat/`)
+
+Modular component structure:
+
+| Component | Purpose |
+|-----------|---------|
+| `ChatInput` | Message input with controls |
+| `ChatSidebar` | Chat list and navigation |
+| `MarkdownRenderer` | Rich markdown rendering with syntax highlighting |
+| `MessageList` | Message display container |
+| `StreamingText` | Flowtoken-style smooth streaming animation |
+| `AnimatedStream` | Character-by-character animation |
+
+---
+
+## Backend Architecture
+
+### Services Layer (`/apps/server/src/services/`)
+
+| Service | Purpose |
+|---------|---------|
+| `context-builder.ts` | Builds system prompt from SOUL.md, MEMORY.md, AGENTS.md |
+| `embeddings.ts` | Vector embeddings for semantic search |
+| `memory-search.ts` | pgvector-powered memory retrieval |
+| `title-generator.ts` | AI-powered chat title generation |
+
+### Auto-Generated Chat Titles
+
+- Triggers after first exchange (2 messages)
+- Uses same AI provider as the chat
+- Sends `title_update` SSE event to frontend
+- Fallback: truncated user message (30 chars)
+
+---
+
+## TanStack Query Integration
+
+### Query Client
+
+Located at `/apps/web/src/lib/query-client.ts`
+
+### Cache Keys Pattern
+
+```typescript
+const chatKeys = {
+  all: ['chats'] as const,
+  lists: () => [...chatKeys.all, 'list'] as const,
+  list: (workspaceId: string) => [...chatKeys.lists(), workspaceId] as const,
+  details: () => [...chatKeys.all, 'detail'] as const,
+  detail: (id: string) => [...chatKeys.details(), id] as const,
+};
+```
+
+### Query Configuration
+
+- **Stale time**: 5 minutes for chat data
+- **Cache invalidation**: Automatic on mutations
+- **Prefetching**: On hover for instant navigation
+
+---
+
+## Composio Integration System
+
+### Workspace-Isolated Integrations
+
+Each workspace has isolated Composio integrations:
+
+- Entity ID pattern: `ws_{workspaceId}_user_{userId}`
+- Stored in `workspace_integrations` table
+- Per-workspace connected accounts
+
+### Integration Routes (`/apps/server/src/routes/integrations.ts`)
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/integrations/toolkits` | GET | List available toolkits |
+| `/api/integrations/:workspaceId` | GET | List workspace integrations |
+| `/api/integrations/:workspaceId/connect` | POST | Initiate connection (get auth URL) |
+| `/api/integrations/:workspaceId/disconnect` | POST | Disconnect integration |
+
+### Entity Isolation
+
+```typescript
+// Workspace-scoped entity for Composio
+const entityId = `ws_${workspaceId}_user_${userId}`;
+```
+
+---
+
+## Tool Registry System
+
+### Icon Mapping (`/apps/web/src/lib/tool-icons.ts`)
+
+Tools are mapped to icons using a direct registry lookup:
+
+```typescript
+export const TOOL_REGISTRY: Record<string, ToolMeta> = {
+  Read: { icon: FileText, category: 'file', label: 'Read file' },
+  Write: { icon: FilePlus, category: 'file', label: 'Write file' },
+  Bash: { icon: Terminal, category: 'shell', label: 'Execute command' },
+  // ... more tools
+};
+```
+
+**Categories:** `file`, `shell`, `search`, `browser`, `communication`, `data`, `utility`, `unknown`
+
+---
+
+## Design System
+
+### Design Tokens (`/apps/web/src/styles/design-tokens.css`)
+
+CSS custom properties for consistent styling:
+
+- **Colors**: Purple scale, neutrals, glass effects
+- **Typography**: Inter (primary), Playfair Display (accent)
+- **Spacing**: Compact scale based on 15px base
+- **Shadows**: Multiple elevation levels
+
+### Tailwind Configuration
+
+Extended with design tokens:
+
+```typescript
+// tailwind.config.js extends CSS variables
+colors: {
+  primary: 'var(--purple-500)',
+  background: 'var(--background)',
+  // ...
+}
+```
+
+### Layout Patterns
+
+- **Flex-based layouts** with `shrink-0` for fixed elements
+- **`min-h-0` pattern** for nested flex scrolling
+- **No `overflow-hidden`** on flex parents of scrollable children
 
 ---
 
@@ -169,25 +360,13 @@ Built by `services/context-builder.ts` → prepends Application Prompt to user's
 
 User's preferred provider and model are persisted in localStorage and restored on app load.
 
-### LocalStorage Keys
+### Storage Keys (see `/apps/web/src/lib/storage.ts`)
 
 | Key | Purpose |
 |-----|---------|
-| `selectedProvider` | User's preferred provider (also used for current chat state) |
-| `selectedModel` | User's preferred model (also used for current chat state) |
-
-### Behavior
-
-- **Creating a new chat** → Restores provider/model from localStorage preferences
-- **Loading an existing chat** → Updates current state but does NOT overwrite preferences (state is memory-only)
-- **Explicitly switching models/providers** → Updates localStorage preferences
-- **Invalid preferences** (e.g., removed models) → Cleared automatically with fallback to defaults
-
-### Important Distinction
-
-When loading an old chat, the provider/model state changes to match that chat, but the localStorage preferences are NOT updated. This ensures:
-1. Viewing old chats doesn't change your preferred model
-2. Creating a new chat always uses your last explicitly selected model
+| `selectedProvider` | User's preferred provider |
+| `selectedModel` | User's preferred model |
+| `currentChatId` | Currently active chat |
 
 ### Validation Functions
 
@@ -219,6 +398,7 @@ getPreferredModel(provider: Provider): string
 | `/api/workspaces/*` | - | Workspace CRUD |
 | `/api/chats/*` | - | Chat CRUD |
 | `/api/memories/*` | - | Memory management |
+| `/api/integrations/*` | - | Composio integrations |
 
 ---
 
@@ -258,13 +438,13 @@ PORT=3001                # Server port
 | `workspace_files` | SOUL.md, MEMORY.md, AGENTS.md per workspace |
 | `workspace_members` | Workspace membership |
 | `workspace_invites` | Team invitations |
+| `workspace_integrations` | Composio integrations per workspace |
 | `chats` | Chat sessions |
 | `messages` | Chat messages |
 | `memories` | Vector-stored memories (pgvector) |
 | `daily_notes` | Daily notes per workspace |
 | `user_api_keys` | User provider API keys |
 | `user_preferences` | User settings |
-| `refresh_tokens` | Legacy (being removed) |
 
 ---
 
@@ -289,21 +469,53 @@ cd apps/server && npx tsc --noEmit
 
 ---
 
+## Streaming Architecture
+
+### Flowtoken-Style Animation
+
+The frontend uses a smooth streaming animation system:
+
+1. **Backend sends small chunks** (1-10 characters at a time)
+2. **Frontend renders incrementally** with consistent timing
+3. **No fancy tricks needed** - simple React rendering suffices
+
+Key insight from `useChatStream.ts`:
+> "If your backend sends big chunks infrequently, NO frontend trick will help."
+
+### SSE Events
+
+| Event | Purpose |
+|-------|---------|
+| `session_init` | New conversation session started |
+| `text` | Text chunk |
+| `tool_use` | Tool call initiated |
+| `tool_result` | Tool execution result |
+| `title_update` | Chat title generated |
+| `done` | Stream complete |
+| `error` | Error occurred |
+| `aborted` | User cancelled |
+
+---
+
 ## Known Issues
 
-1. ~~No monorepo structure~~ ✅ Done
-2. ~~Backend is plain JS~~ ✅ Done (now TypeScript)
-3. ~~Raw SQL migrations~~ ✅ Done (now Drizzle ORM)
-4. ~~Auth system broken~~ ✅ Done (session-based auth)
-5. No tests
-6. Express instead of Hono (planned migration)
-7. Frontend monolithic - needs modularization
+1. ❌ No tests
+2. ⚠️ Express instead of Hono (planned migration)
 
 ---
 
 ## Migration History
 
-### 2026-04-04: Monorepo + TypeScript Migration
+### 2025-04-05: UI & Architecture Improvements
+- TanStack Query integration for data fetching
+- Feature-based hooks refactoring
+- Workspace-isolated Composio integrations
+- AI-powered chat title generation
+- Professional markdown rendering with syntax highlighting
+- Design system with CSS tokens
+- Flowtoken-style streaming animation
+
+### 2025-04-04: Monorepo + TypeScript Migration
 - Migrated to pnpm workspaces monorepo structure
 - Created `@normie/types` and `@normie/utils` packages
 - Converted Electron main/preload to TypeScript

@@ -16,6 +16,7 @@ export interface ElectronAPI {
     }>;
   }>;
   getProviders: () => Promise<{ providers: string[]; default: string }>;
+  openExternal: (url: string) => Promise<void>;
 }
 
 export interface AuthAPI {

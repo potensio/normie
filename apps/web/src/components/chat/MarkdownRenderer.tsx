@@ -259,19 +259,32 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
             </blockquote>
           ),
 
-          // Links - Neon pink style
-          a: ({ href, children, ...props }) => (
-            <a
-              href={href}
-              className="hover:underline underline-offset-2"
-              style={{ color: "#ff2a6d", textDecorationColor: "rgba(255, 42, 109, 0.5)" }}
-              target={href?.startsWith("http") ? "_blank" : undefined}
-              rel={href?.startsWith("http") ? "noopener noreferrer" : undefined}
-              {...props}
-            >
-              {children}
-            </a>
-          ),
+          // Links - Open external in default browser
+          a: ({ href, children, ...props }) => {
+            const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+              if (href && (href.startsWith('http://') || href.startsWith('https://'))) {
+                e.preventDefault();
+                // Use Electron API if available, otherwise fall back to window.open
+                if (window.electronAPI?.openExternal) {
+                  window.electronAPI.openExternal(href);
+                } else {
+                  window.open(href, '_blank', 'noopener,noreferrer');
+                }
+              }
+            };
+
+            return (
+              <a
+                href={href}
+                className="hover:underline underline-offset-2 cursor-pointer"
+                style={{ color: "#ff2a6d", textDecorationColor: "rgba(255, 42, 109, 0.5)" }}
+                onClick={handleClick}
+                {...props}
+              >
+                {children}
+              </a>
+            );
+          },
 
           // Images
           img: ({ src, alt, ...props }) => (

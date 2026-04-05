@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import path from 'path';
 import { spawn, ChildProcess } from 'child_process';
 import fs from 'fs';
@@ -86,6 +86,31 @@ async function createWindow(): Promise<BrowserWindow> {
     mainWindow.show();
   });
 
+  // Open external links in default browser
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    // Open all external URLs in default browser
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      // Use setTimeout to ensure we don't block the handler
+      setTimeout(() => {
+        shell.openExternal(url);
+      }, 0);
+      return { action: 'deny' };
+    }
+    return { action: 'allow' };
+  });
+
+  // Prevent accidental navigation away from app
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    const isAppUrl = url.startsWith('http://localhost:5173') || 
+                     url.startsWith('http://localhost:3001') ||
+                     url.startsWith('file://');
+    
+    if (!isAppUrl && (url.startsWith('http://') || url.startsWith('https://'))) {
+      event.preventDefault();
+      shell.openExternal(url);
+    }
+  });
+
   return mainWindow;
 }
 
@@ -128,6 +153,20 @@ function stopBackend(): void {
 app.whenReady().then(async () => {
   // Start backend server
   startBackend();
+
+  // Register IPC handler for opening external URLs
+  ipcMain.handle('open-external', async (_event, url: string) => {
+    try {
+      if (url.startsWith('http://') || url.startsWith('https://')) {
+        await shell.openExternal(url);
+        return { success: true };
+      }
+      return { success: false, error: 'Invalid URL protocol' };
+    } catch (error) {
+      safeLog('[Main]', `Failed to open external URL: ${error}`);
+      return { success: false, error: String(error) };
+    }
+  });
 
   // Create window after a short delay to let backend start
   setTimeout(async () => {

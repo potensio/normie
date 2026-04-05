@@ -1,4 +1,4 @@
-import { contextBridge } from 'electron';
+import { contextBridge, ipcRenderer } from 'electron';
 
 const SERVER_URL = 'http://localhost:3001';
 
@@ -465,6 +465,27 @@ contextBridge.exposeInMainWorld('electronAPI', {
     } catch (error) {
       console.error('[PRELOAD] Error fetching providers:', error);
       return { providers: ['claude'], default: 'claude' };
+    }
+  },
+
+  // Open URL in default browser
+  openExternal: async (url: string): Promise<void> => {
+    try {
+      // Validate URL is http/https
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        console.error('[PRELOAD] Invalid URL for openExternal:', url);
+        return;
+      }
+      
+      // Use Electron's shell API via IPC to main process
+      const result = await ipcRenderer.invoke('open-external', url);
+      if (!result?.success) {
+        console.error('[PRELOAD] Failed to open external URL:', result?.error);
+      }
+    } catch (error) {
+      console.error('[PRELOAD] Error calling openExternal:', error);
+      // Fallback to window.open
+      window.open(url, '_blank', 'noopener,noreferrer');
     }
   }
 });

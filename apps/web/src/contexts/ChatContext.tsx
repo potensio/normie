@@ -7,7 +7,7 @@
 import { createContext, useContext, useState, useCallback } from 'react';
 import type { Chat, Message, Provider, ToolCall, Todo, ThinkingMode } from '@normie/types';
 import { useAuth } from './AuthContext';
-import { useChats, usePreferences, useChatStream, useChatActions, useChatSender, useCurrentChat, useChatNavigation } from '@/hooks';
+import { useChats, usePreferences, useChatStream, useChatSender, useCurrentChat, useChatNavigation, useChatDelete } from '@/hooks';
 
 interface ChatContextType {
   // State
@@ -86,16 +86,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     reset: resetStream,
   } = useChatStream();
 
-  // Chat actions (only for delete - loading handled by TanStack Query)
-  const { deleteChat: deleteChatAction } = useChatActions({
-    isLoggedIn,
-    onDelete: () => {
-      // Navigate to new chat after delete if current was deleted
-      if (currentChatId) {
-        navigateToNewChat();
-      }
-    },
-  });
+  // Chat delete action
+  const { deleteChat: deleteChatAction } = useChatDelete();
 
   // Combine messages: use stream messages when active, otherwise use loaded chat messages
   const displayMessages = streamMessages.length > 0 ? streamMessages : messages;
@@ -131,8 +123,12 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const deleteChat = useCallback(
     async (chatId: string) => {
       await deleteChatAction(chatId);
+      // Navigate to new chat after delete if current was deleted
+      if (currentChatId === chatId) {
+        navigateToNewChat();
+      }
     },
-    [deleteChatAction]
+    [deleteChatAction, currentChatId, navigateToNewChat]
   );
 
   const sendMessage = useCallback(async (content: string) => {

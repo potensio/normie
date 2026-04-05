@@ -334,6 +334,15 @@ app.post('/api/chat', async (req, res) => {
 
     // Collect assistant response for saving
     let assistantResponse = '';
+    
+    // Collect tool calls for persistence
+    let messageToolCalls: Array<{
+      id: string;
+      name: string;
+      input: Record<string, unknown>;
+      status: string;
+      result?: unknown;
+    }> = [];
 
     // Stream responses from the provider
     try {
@@ -368,7 +377,26 @@ app.post('/api/chat', async (req, res) => {
         
         if (chunk.type === 'tool_use') {
           console.log('[SSE] Sending tool_use:', chunk.name);
+          // Collect tool call for persistence
+          messageToolCalls.push({
+            id: chunk.id || crypto.randomUUID(),
+            name: chunk.name || '',
+            input: (chunk.input as Record<string, unknown>) || {},
+            status: 'running',
+          });
         }
+        
+        if (chunk.type === 'tool_result') {
+          console.log('[SSE] Sending tool_result for:', chunk.tool_use_id);
+          // Update tool call status (success if result exists, error otherwise)
+          const toolCall = messageToolCalls.find(t => t.id === chunk.tool_use_id);
+          if (toolCall) {
+            // If there's a result, it's success; otherwise error
+            toolCall.status = chunk.result !== undefined ? 'success' : 'error';
+            toolCall.result = chunk.result;
+          }
+        }
+        
         if (chunk.type === 'text') {
           console.log('[SSE] Sending text chunk, length:', chunk.content?.length || 0);
           assistantResponse += chunk.content || '';
@@ -393,15 +421,18 @@ app.post('/api/chat', async (req, res) => {
       }
     }
 
-    // Save assistant response to database
+    // Save assistant response to database (with tool calls in metadata)
     if (dbChatId && assistantResponse) {
       try {
         await db.insert(schema.messages).values({
           chatId: dbChatId,
           role: 'assistant',
-          content: assistantResponse
+          content: assistantResponse,
+          metadata: messageToolCalls.length > 0
+            ? { inlineToolCalls: messageToolCalls }
+            : {}
         });
-        console.log('[CHAT] Saved assistant response to database');
+        console.log('[CHAT] Saved assistant response to database with', messageToolCalls.length, 'tool calls');
       } catch (msgError) {
         console.error('[CHAT] Error saving assistant message:', msgError);
       }
