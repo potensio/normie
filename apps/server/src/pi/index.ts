@@ -257,15 +257,17 @@ export async function* runPiQuery(
       });
     }
     
-    // Create Mantle config with model and tools
+    // Create Mantle config with model, tools, and context window
     const mantleConfigWithModel = {
       ...mantleConfig,
       model: piModel.id, // Use the model ID directly (e.g., 'zai.glm-5')
       tools, // Pass tools for function calling support
+      contextWindow: piModel.contextWindow, // Pass context window for compaction
     };
     
     console.log(`[PiAgent] Streaming from Mantle with model: ${mantleConfigWithModel.model}`);
     console.log(`[PiAgent] Tools passed to Mantle: ${tools.length}`);
+    console.log(`[PiAgent] Context window: ${piModel.contextWindow} tokens`);
     
     // Stream from Mantle and yield chunks
     try {

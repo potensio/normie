@@ -23,6 +23,113 @@ export interface BedrockMantleConfig {
   maxTokens?: number;
   temperature?: number;
   tools?: AgentTool[];
+  contextWindow?: number;
+}
+
+/**
+ * Default context window for Mantle models (128k tokens)
+ */
+const DEFAULT_CONTEXT_WINDOW = 128000;
+
+/**
+ * Tokens to reserve for the response
+ */
+const RESERVE_TOKENS = 8000;
+
+/**
+ * Estimate tokens in ChatMessage array
+ */
+function estimateMessagesTokens(messages: ChatMessage[]): number {
+  // Simple token estimation: ~4 characters per token
+  // This is a rough approximation but good enough for context management
+  let totalChars = 0;
+  for (const m of messages) {
+    if (m.content) totalChars += m.content.length;
+    if (m.tool_calls) {
+      totalChars += JSON.stringify(m.tool_calls).length;
+    }
+    if (m.name) totalChars += m.name.length;
+    totalChars += 20; // Role and metadata overhead
+  }
+  return Math.ceil(totalChars / 4);
+}
+
+/**
+ * Context management result
+ */
+interface ContextCheckResult {
+  messages: ChatMessage[];
+  wasCompacted: boolean;
+  estimatedTokens: number;
+  percentUsed: number;
+}
+
+/**
+ * Check context size and truncate old messages if needed.
+ * Keeps system message + recent messages within budget.
+ */
+function checkAndTruncateContext(
+  messages: ChatMessage[],
+  contextWindow: number,
+): ContextCheckResult {
+  const systemMessage = messages.find(m => m.role === 'system');
+  const nonSystemMessages = messages.filter(m => m.role !== 'system');
+  
+  // Calculate current token usage
+  const totalTokens = estimateMessagesTokens(messages);
+  const percentUsed = (totalTokens / contextWindow) * 100;
+  
+  // Log warning if approaching limit
+  if (percentUsed > 70) {
+    console.log(`[Mantle:Context] ⚠️ Context usage: ${Math.round(percentUsed)}% (${totalTokens}/${contextWindow} tokens)`);
+  }
+  
+  // If we're within budget, return as-is
+  const budget = contextWindow - RESERVE_TOKENS;
+  if (totalTokens <= budget) {
+    return {
+      messages,
+      wasCompacted: false,
+      estimatedTokens: totalTokens,
+      percentUsed,
+    };
+  }
+  
+  // Need to truncate - keep system message + as many recent messages as fit
+  console.log(`[Mantle:Context] 🔧 Compacting context: ${totalTokens} > ${budget} tokens`);
+  
+  // Start with system message
+  const truncated: ChatMessage[] = systemMessage ? [systemMessage] : [];
+  let currentTokens = systemMessage ? estimateMessagesTokens([systemMessage]) : 0;
+  
+  // Add messages from newest to oldest until budget exhausted
+  const reversedNonSystem = [...nonSystemMessages].reverse();
+  const kept: ChatMessage[] = [];
+  
+  for (const msg of reversedNonSystem) {
+    const msgTokens = estimateMessagesTokens([msg]);
+    if (currentTokens + msgTokens <= budget) {
+      kept.unshift(msg); // Add to front to preserve order
+      currentTokens += msgTokens;
+    } else {
+      // Budget exhausted, stop adding
+      break;
+    }
+  }
+  
+  truncated.push(...kept);
+  
+  const newTokens = estimateMessagesTokens(truncated);
+  const removedCount = messages.length - truncated.length;
+  
+  console.log(`[Mantle:Context] Removed ${removedCount} old messages, new usage: ${newTokens} tokens`);
+  
+  return {
+    messages: truncated,
+    wasCompacted: true,
+    estimatedTokens: newTokens,
+    percentUsed: (newTokens / contextWindow) * 100,
+  };
 }
 
 /**
@@ -145,12 +252,21 @@ export async function* streamBedrockMantle(
   messages: ChatMessage[],
   signal?: AbortSignal
 ): AsyncGenerator<StreamChunk> {
-  const { apiKey, baseUrl, model, maxTokens = 4096, temperature = 0.7, tools = [] } = config;
+  const { 
+    apiKey, 
+    baseUrl, 
+    model, 
+    maxTokens = 4096, 
+    temperature = 0.7, 
+    tools = [],
+    contextWindow = DEFAULT_CONTEXT_WINDOW,
+  } = config;
 
   console.log('[BedrockMantle] Starting stream...');
   console.log(`[BedrockMantle] Model: ${model}`);
   console.log(`[BedrockMantle] Base URL: ${baseUrl}`);
   console.log(`[BedrockMantle] Tools available: ${tools.length}`);
+  console.log(`[BedrockMantle] Context window: ${contextWindow} tokens`);
 
   // Build tool definitions for API
   const toolDefinitions = tools.length > 0 
@@ -170,7 +286,12 @@ export async function* streamBedrockMantle(
   };
 
   // Track conversation for multi-turn tool usage
-  const conversationMessages: ChatMessage[] = [...messages];
+  let conversationMessages: ChatMessage[] = [...messages];
+  
+  // Initial context check
+  const initialContext = checkAndTruncateContext(conversationMessages, contextWindow);
+  conversationMessages = initialContext.messages;
+  console.log(`[BedrockMantle] Initial context: ${initialContext.estimatedTokens} tokens (${Math.round(initialContext.percentUsed)}%)`);
   
   // Limit iterations to prevent infinite loops
   const maxIterations = 10;
@@ -180,6 +301,12 @@ export async function* streamBedrockMantle(
     while (iteration < maxIterations) {
       iteration++;
       console.log(`[BedrockMantle] Iteration ${iteration}/${maxIterations}`);
+      
+      // Check context size before each API call
+      const contextCheck = checkAndTruncateContext(conversationMessages, contextWindow);
+      if (contextCheck.wasCompacted) {
+        conversationMessages = contextCheck.messages;
+      }
 
       // Make request to API
       const requestBody: Record<string, unknown> = {
