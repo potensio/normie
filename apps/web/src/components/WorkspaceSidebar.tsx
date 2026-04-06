@@ -7,12 +7,11 @@
  * - Settings
  */
 import {
-  LayoutGrid,
-  Wrench,
   Settings,
-  Puzzle,
   ChevronDown,
   Plus,
+  LayoutGrid,
+  Wrench,
 } from "lucide-react";
 
 interface WorkspaceSidebarProps {
@@ -22,8 +21,8 @@ interface WorkspaceSidebarProps {
   onSwitchWorkspace: (id: string) => void;
   
   // Active view
-  activeView: "chat" | "skills" | "integrations" | "settings";
-  onViewChange: (view: "chat" | "skills" | "integrations" | "settings") => void;
+  activeView: "chat" | "skills" | "settings";
+  onViewChange: (view: "chat" | "skills" | "settings") => void;
 }
 
 export function WorkspaceSidebar({
@@ -52,21 +51,15 @@ export function WorkspaceSidebar({
       <nav className="flex flex-col gap-1 w-full">
         <NavButton
           icon={LayoutGrid}
-          label="Chat"
           active={activeView === "chat"}
           onClick={() => onViewChange("chat")}
+          title="Chat"
         />
         <NavButton
           icon={Wrench}
-          label="Skills"
           active={activeView === "skills"}
           onClick={() => onViewChange("skills")}
-        />
-        <NavButton
-          icon={Puzzle}
-          label="Integrations"
-          active={activeView === "integrations"}
-          onClick={() => onViewChange("integrations")}
+          title="Skills & Integrations"
         />
       </nav>
 
@@ -76,9 +69,9 @@ export function WorkspaceSidebar({
       {/* Bottom: Settings */}
       <NavButton
         icon={Settings}
-        label="Settings"
         active={activeView === "settings"}
         onClick={() => onViewChange("settings")}
+        title="Settings"
       />
     </aside>
   );
@@ -90,24 +83,23 @@ export function WorkspaceSidebar({
 
 interface NavButtonProps {
   icon: React.ComponentType<{ className?: string; strokeWidth?: number | string }>;
-  label: string;
   active: boolean;
   onClick: () => void;
+  title: string;
 }
 
-function NavButton({ icon: Icon, label, active, onClick }: NavButtonProps) {
+function NavButton({ icon: Icon, active, onClick, title }: NavButtonProps) {
   return (
     <button
       onClick={onClick}
-      className={`w-full flex flex-col items-center gap-1 py-2 rounded-xl transition-colors group ${
+      className={`w-full flex items-center justify-center py-2.5 rounded-xl transition-colors group ${
         active
           ? "bg-zinc-200 text-zinc-900"
           : "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700"
       }`}
-      title={label}
+      title={title}
     >
       <Icon className="w-5 h-5" strokeWidth={1.5} />
-      <span className="text-[10px] font-medium tracking-wide">{label}</span>
     </button>
   );
 }

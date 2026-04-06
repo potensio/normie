@@ -12,7 +12,7 @@ import { AuthPage } from "@/pages/AuthPage";
 import { SkillsPage } from "@/pages/SkillsPage";
 import { ChevronLeft, PanelRightOpen } from "lucide-react";
 
-type ViewType = "chat" | "skills" | "integrations" | "settings";
+type ViewType = "chat" | "skills" | "settings";
 
 function App() {
   const { isLoggedIn, isLoading: authLoading, user, workspaces, currentWorkspace, switchWorkspace, createWorkspace } = useAuth();
@@ -61,17 +61,10 @@ function App() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         {activeView === "skills" ? (
-          /* Skills Page */
+          /* Skills & Integrations Page */
           <SkillsPage
             workspaceId={currentWorkspace?.id || ""}
             workspaceName={currentWorkspace?.name || "Unknown"}
-            onBack={() => setActiveView("chat")}
-          />
-        ) : activeView === "integrations" ? (
-          /* Integrations Page (placeholder) */
-          <PlaceholderPage
-            title="Integrations"
-            description="Connect your favorite tools and services"
             onBack={() => setActiveView("chat")}
           />
         ) : activeView === "settings" ? (

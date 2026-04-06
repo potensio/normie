@@ -10,18 +10,30 @@
  * If your backend sends big chunks infrequently, NO frontend trick will help.
  */
 import { useState, useRef, useCallback } from 'react';
-import type { Message, ToolCall, Todo, InlineToolCall, Provider } from '@normie/types';
+import type {
+  Message,
+  ToolCall,
+  Todo,
+  InlineToolCall,
+  Provider,
+  MessageBlock,
+  TextBlock,
+  ToolBlock,
+} from '@normie/types';
 import { generateId } from '@normie/utils';
 import { chatApi } from '@/lib/api';
 import { queryClient } from '@/lib/query-client';
+import { classifyToolError } from '@/lib/error-messages';
 
 // Helper to check if error is a user-initiated abort
 function isAbortError(error: unknown): boolean {
   if (error instanceof Error) {
-    return error.name === 'AbortError' ||
-           error.message?.includes('abort') ||
-           error.message?.includes('cancelled') ||
-           error.message?.includes('The operation was aborted');
+    return (
+      error.name === 'AbortError' ||
+      error.message?.includes('abort') ||
+      error.message?.includes('cancelled') ||
+      error.message?.includes('The operation was aborted')
+    );
   }
   return false;
 }
@@ -32,23 +44,50 @@ interface UseChatStreamReturn {
   toolCalls: ToolCall[];
   todos: Todo[];
   generatedTitle: string | null;
-  sendMessage: (params: {
-    content: string;
-    chatId: string;
-    chatTitle: string;
-    provider: Provider;
-    model: string;
-    workspaceId: string | null;
-    userId: string;
-  }, callbacks?: {
-    onTitleUpdate?: (title: string) => void;
-  }) => Promise<{ chatId: string; chatTitle: string } | null>;
+  sendMessage: (
+    params: {
+      content: string;
+      chatId: string;
+      chatTitle: string;
+      provider: Provider;
+      model: string;
+      workspaceId: string | null;
+      userId: string;
+    },
+    callbacks?: {
+      onTitleUpdate?: (title: string) => void;
+    }
+  ) => Promise<{ chatId: string; chatTitle: string } | null>;
   stopStreaming: (chatId: string, provider: Provider) => Promise<void>;
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
   setToolCalls: React.Dispatch<React.SetStateAction<ToolCall[]>>;
   setTodos: React.Dispatch<React.SetStateAction<Todo[]>>;
-  loadMessages: (chat: { messages: Message[]; todos?: Todo[]; toolCalls?: ToolCall[] }) => void;
+  loadMessages: (chat: {
+    messages: Message[];
+    todos?: Todo[];
+    toolCalls?: ToolCall[];
+  }) => void;
   reset: () => void;
+}
+
+/**
+ * Merge adjacent text blocks for efficiency
+ */
+function mergeTextBlocks(blocks: MessageBlock[]): MessageBlock[] {
+  const result: MessageBlock[] = [];
+
+  for (const block of blocks) {
+    const lastBlock = result[result.length - 1];
+
+    if (block.type === 'text' && lastBlock?.type === 'text') {
+      // Merge with previous text block
+      lastBlock.content += block.content;
+    } else {
+      result.push(block);
+    }
+  }
+
+  return result;
 }
 
 export function useChatStream(): UseChatStreamReturn {
@@ -70,19 +109,29 @@ export function useChatStream(): UseChatStreamReturn {
     }
   }, []);
 
-  const loadMessages = useCallback((chat: { messages: Message[]; todos?: Todo[]; toolCalls?: ToolCall[] }) => {
-    setMessages(chat.messages);
-    setTodos(chat.todos || []);
-    setToolCalls(chat.toolCalls || []);
-  }, []);
+  const loadMessages = useCallback(
+    (chat: {
+      messages: Message[];
+      todos?: Todo[];
+      toolCalls?: ToolCall[];
+    }) => {
+      setMessages(chat.messages);
+      setTodos(chat.todos || []);
+      setToolCalls(chat.toolCalls || []);
+    },
+    []
+  );
 
-  const stopStreaming = useCallback(async (chatId: string, provider: Provider) => {
-    window.electronAPI?.abortCurrentRequest();
-    if (chatId) {
-      await chatApi.abort(chatId, provider);
-    }
-    setIsStreaming(false);
-  }, []);
+  const stopStreaming = useCallback(
+    async (chatId: string, provider: Provider) => {
+      window.electronAPI?.abortCurrentRequest();
+      if (chatId) {
+        await chatApi.abort(chatId, provider);
+      }
+      setIsStreaming(false);
+    },
+    []
+  );
 
   const sendMessage = useCallback(
     async (
@@ -99,14 +148,22 @@ export function useChatStream(): UseChatStreamReturn {
         onTitleUpdate?: (title: string) => void;
       }
     ): Promise<{ chatId: string; chatTitle: string } | null> => {
-      const { content, chatId, chatTitle, provider, model, workspaceId, userId } = params;
+      const {
+        content,
+        chatId,
+        chatTitle,
+        provider,
+        model,
+        workspaceId,
+        userId,
+      } = params;
 
       if (!content.trim() || isStreaming) return null;
 
       const userMessage: Message = {
         id: generateId(),
         role: 'user',
-        content: content.trim(),
+        blocks: [{ type: 'text', content: content.trim() }],
       };
 
       // Add user message
@@ -119,9 +176,8 @@ export function useChatStream(): UseChatStreamReturn {
         {
           id: assistantMessageId,
           role: 'assistant',
-          content: '',
+          blocks: [],
           reasoning: '',
-          inlineToolCalls: [],
         },
       ]);
 
@@ -137,9 +193,12 @@ export function useChatStream(): UseChatStreamReturn {
           userId,
         });
 
-        let fullContent = '';
+        let blocks: MessageBlock[] = [];
         let fullReasoning = '';
-        const pendingToolCalls = new Map<string, string>();
+        const pendingToolCalls = new Map<
+          string,
+          { localId: string; startTime: number }
+        >();
 
         while (true) {
           const { done, value } = await reader.read();
@@ -161,13 +220,17 @@ export function useChatStream(): UseChatStreamReturn {
                     if (data.isReasoning) {
                       fullReasoning += data.content;
                     } else {
-                      fullContent += data.content;
+                      // Append text block
+                      blocks = mergeTextBlocks([
+                        ...blocks,
+                        { type: 'text', content: data.content } as TextBlock,
+                      ]);
                     }
-                    // Simple React update - this is how most apps do it
+                    // Update message with new blocks
                     setMessages((prev) =>
                       prev.map((m) =>
                         m.id === assistantMessageId
-                          ? { ...m, content: fullContent, reasoning: fullReasoning }
+                          ? { ...m, blocks: [...blocks], reasoning: fullReasoning }
                           : m
                       )
                     );
@@ -177,7 +240,9 @@ export function useChatStream(): UseChatStreamReturn {
                 case 'tool_use':
                   if (data.name) {
                     const localToolId = generateId();
+                    const startTime = Date.now();
 
+                    // Track tool call (for ToolCall[] state - separate from blocks)
                     const toolCall: ToolCall = {
                       id: localToolId,
                       name: data.name,
@@ -186,30 +251,37 @@ export function useChatStream(): UseChatStreamReturn {
                     };
                     setToolCalls((prev) => [...prev, toolCall]);
 
+                    // Track for later update
                     if (data.id) {
-                      pendingToolCalls.set(data.id, localToolId);
+                      pendingToolCalls.set(data.id, {
+                        localId: localToolId,
+                        startTime,
+                      });
                     }
 
+                    // Append tool block
                     const inlineToolCall: InlineToolCall = {
                       id: localToolId,
                       name: data.name,
                       input: data.input || {},
                       status: 'running',
+                      startTime,
                     };
+                    blocks = [
+                      ...blocks,
+                      { type: 'tool', toolCall: inlineToolCall } as ToolBlock,
+                    ];
+
+                    // Update message
                     setMessages((prev) =>
                       prev.map((m) =>
                         m.id === assistantMessageId
-                          ? {
-                              ...m,
-                              inlineToolCalls: [
-                                ...(m.inlineToolCalls || []),
-                                inlineToolCall,
-                              ],
-                            }
+                          ? { ...m, blocks: [...blocks], reasoning: fullReasoning }
                           : m
                       )
                     );
 
+                    // Handle TodoWrite
                     if (data.name === 'TodoWrite' && data.input?.todos) {
                       setTodos(data.input.todos as Todo[]);
                     }
@@ -219,35 +291,57 @@ export function useChatStream(): UseChatStreamReturn {
                 case 'tool_result':
                   if (data.tool_use_id || data.result !== undefined) {
                     const apiToolId = data.tool_use_id;
-                    const localId = apiToolId
+                    const tracking = apiToolId
                       ? pendingToolCalls.get(apiToolId)
                       : null;
 
-                    if (localId) {
+                    if (tracking) {
+                      const { localId, startTime } = tracking;
+                      const duration = Math.round((Date.now() - startTime) / 100) / 10;
+
+                      // Update ToolCall[] state
+                      const isError = data.result?.error || data.result?.status === 'error';
                       setToolCalls((prev) =>
                         prev.map((t) =>
                           t.id === localId
-                            ? { ...t, status: 'success', result: data.result }
+                            ? {
+                                ...t,
+                                status: isError ? 'error' : 'success',
+                                result: data.result,
+                              }
                             : t
                         )
                       );
 
+                      // Update tool block in blocks array
+                      blocks = blocks.map((block) => {
+                        if (
+                          block.type === 'tool' &&
+                          block.toolCall.id === localId
+                        ) {
+                          return {
+                            ...block,
+                            toolCall: {
+                              ...block.toolCall,
+                              status: isError ? 'error' : 'success',
+                              result: data.result,
+                              duration,
+                              errorMessage: isError
+                                ? classifyToolError(
+                                    data.result?.error || data.result
+                                  )
+                                : undefined,
+                            },
+                          } as ToolBlock;
+                        }
+                        return block;
+                      });
+
+                      // Update message
                       setMessages((prev) =>
                         prev.map((m) =>
                           m.id === assistantMessageId
-                            ? {
-                                ...m,
-                                inlineToolCalls:
-                                  m.inlineToolCalls?.map((t) =>
-                                    t.id === localId
-                                      ? {
-                                          ...t,
-                                          status: 'success',
-                                          result: data.result,
-                                        }
-                                      : t
-                                  ) || [],
-                              }
+                            ? { ...m, blocks: [...blocks], reasoning: fullReasoning }
                             : m
                         )
                       );
@@ -262,16 +356,24 @@ export function useChatStream(): UseChatStreamReturn {
                   if (data.title) {
                     setGeneratedTitle(data.title);
                     // Update the chat title in query cache
-                    queryClient.setQueryData(['chats', 'list'], (old: unknown) => {
-                      if (!old || typeof old !== 'object' || !('chats' in old)) return old;
-                      const oldData = old as { chats: Array<{ id: string; title: string }> };
-                      return {
-                        ...oldData,
-                        chats: oldData.chats.map((chat) =>
-                          chat.id === chatId ? { ...chat, title: data.title } : chat
-                        ),
-                      };
-                    });
+                    queryClient.setQueryData(
+                      ['chats', 'list'],
+                      (old: unknown) => {
+                        if (!old || typeof old !== 'object' || !('chats' in old))
+                          return old;
+                        const oldData = old as {
+                          chats: Array<{ id: string; title: string }>;
+                        };
+                        return {
+                          ...oldData,
+                          chats: oldData.chats.map((chat) =>
+                            chat.id === chatId
+                              ? { ...chat, title: data.title }
+                              : chat
+                          ),
+                        };
+                      }
+                    );
                     // Call the callback if provided
                     callbacks?.onTitleUpdate?.(data.title);
                   }
@@ -292,11 +394,8 @@ export function useChatStream(): UseChatStreamReturn {
             if (m.id !== assistantMessageId) return m;
             return {
               ...m,
-              content: fullContent,
+              blocks: blocks.length > 0 ? blocks : undefined,
               reasoning: fullReasoning || undefined,
-              inlineToolCalls: m.inlineToolCalls?.length
-                ? m.inlineToolCalls
-                : undefined,
             };
           })
         );
@@ -314,7 +413,7 @@ export function useChatStream(): UseChatStreamReturn {
               m.id === assistantMessageId
                 ? {
                     ...m,
-                    // Keep accumulated content, clean up reasoning if empty
+                    // Keep accumulated blocks, clean up reasoning if empty
                     reasoning: m.reasoning || undefined,
                   }
                 : m
@@ -323,16 +422,22 @@ export function useChatStream(): UseChatStreamReturn {
         } else {
           // Only show error for actual errors (not aborts)
           setMessages((prev) =>
-            prev.map((m) =>
-              m.id === assistantMessageId
-                ? {
-                    ...m,
-                    content:
-                      m.content +
-                      `\n\n[Error: ${error instanceof Error ? error.message : 'Unknown error'}]`,
-                  }
-                : m
-            )
+            prev.map((m) => {
+              if (m.id !== assistantMessageId) return m;
+
+              // Add error as text block
+              const errorBlock: TextBlock = {
+                type: 'text',
+                content: `\n\n[Error: ${error instanceof Error ? error.message : 'Unknown error'}]`,
+              };
+
+              return {
+                ...m,
+                blocks: m.blocks
+                  ? [...m.blocks, errorBlock]
+                  : [errorBlock],
+              };
+            })
           );
         }
 

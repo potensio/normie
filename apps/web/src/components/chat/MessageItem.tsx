@@ -2,12 +2,13 @@
  * MessageItem - Individual message rendering with animations
  *
  * Streaming: Text accumulates via RAF-batched updates for smooth 60fps appearance.
+ * Blocks: Interleaved text and tool calls rendered in stream order.
  */
 import { useMemo, memo } from "react";
 import { motion } from "framer-motion";
-import type { Message } from "@normie/types";
+import type { Message, TextBlock } from "@normie/types";
 import { ThinkingBlock } from "../ThinkingBlock";
-import { InlineToolCall } from "../InlineToolCall";
+import { MessageBlocks } from "../MessageBlocks";
 import { AnimatedStream } from "./AnimatedStream";
 
 // Format relative time (e.g., "Just now", "2m ago", "1h ago")
@@ -27,6 +28,15 @@ function formatRelativeTime(date: Date): string {
   return date.toLocaleDateString();
 }
 
+// Helper to extract text content from blocks (for user messages)
+function getTextFromBlocks(blocks: Message["blocks"]): string {
+  if (!blocks) return "";
+  return blocks
+    .filter((b): b is TextBlock => b.type === "text")
+    .map((b) => b.content)
+    .join("");
+}
+
 interface MessageItemProps {
   message: Message;
   isStreaming?: boolean;
@@ -41,6 +51,11 @@ export const MessageItem = memo(function MessageItem({
   // Generate a stable timestamp for this message instance
   const timestamp = useMemo(() => new Date(), []);
 
+  // Get text content - from blocks (new) or content (legacy)
+  const textContent = message.blocks
+    ? getTextFromBlocks(message.blocks)
+    : message.content || "";
+
   if (isUser) {
     return (
       <motion.div
@@ -51,7 +66,7 @@ export const MessageItem = memo(function MessageItem({
       >
         <div className="bg-gradient-to-br from-purple-500 to-purple-600 px-3.5 py-2 rounded-2xl max-w-2xl border border-purple-400/50 shadow-purple">
           <p className="text-sm font-normal text-white leading-relaxed">
-            {message.content}
+            {textContent}
           </p>
         </div>
         <span className="text-xs font-light text-text-tertiary mr-1.5">
@@ -60,6 +75,13 @@ export const MessageItem = memo(function MessageItem({
       </motion.div>
     );
   }
+
+  // Check if there are any blocks to render
+  const hasBlocks = message.blocks && message.blocks.length > 0;
+  // Check if there's legacy content (for backward compatibility)
+  const hasContent = !hasBlocks && message.content;
+  // Check if we're at the initial streaming state
+  const isInitialStreaming = isStreaming && !hasBlocks && !hasContent && !message.reasoning;
 
   return (
     <motion.div
@@ -72,28 +94,24 @@ export const MessageItem = memo(function MessageItem({
       {message.reasoning && (
         <ThinkingBlock
           content={message.reasoning}
-          isStreaming={isStreaming && !message.content}
+          isStreaming={isStreaming && !hasBlocks && !hasContent}
         />
       )}
 
-      {/* Inline Tool Calls - Shown in stream order */}
-      {message.inlineToolCalls && message.inlineToolCalls.length > 0 && (
-        <div className="space-y-3">
-          {message.inlineToolCalls.map((toolCall) => (
-            <InlineToolCall key={toolCall.id} toolCall={toolCall} />
-          ))}
-        </div>
+      {/* New: Message blocks - interleaved text and tools */}
+      {hasBlocks && (
+        <MessageBlocks blocks={message.blocks!} isStreaming={isStreaming} />
       )}
 
-      {/* Main Content - smooth streaming text */}
-      {message.content && (
+      {/* Legacy: Main Content - for backward compatibility */}
+      {hasContent && (
         <div>
-          <AnimatedStream content={message.content} isStreaming={isStreaming} />
+          <AnimatedStream content={message.content!} isStreaming={isStreaming} />
         </div>
       )}
 
       {/* Empty state when streaming starts - bouncing dots */}
-      {isStreaming && !message.content && !message.reasoning && (
+      {isInitialStreaming && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -114,7 +132,9 @@ export const MessageItem = memo(function MessageItem({
               />
             ))}
           </div>
-          <span className="sr-only">Generating response. Click the stop button in the input to cancel.</span>
+          <span className="sr-only">
+            Generating response. Click the stop button in the input to cancel.
+          </span>
         </motion.div>
       )}
     </motion.div>

@@ -1,7 +1,7 @@
 /**
- * SkillsPage - Workspace Skills Management
+ * SkillsPage - Workspace Skills & Integrations Management
  * 
- * Allows users to view and upload skills for their workspace.
+ * Allows users to view and upload skills, and manage integrations.
  */
 import { useState } from "react";
 import {
@@ -13,6 +13,8 @@ import {
   Download,
   Upload,
   X,
+  Plug,
+  Check,
 } from "lucide-react";
 
 interface SkillsPageProps {
@@ -26,27 +28,53 @@ const PLACEHOLDER_SKILLS = [
   {
     id: "1",
     name: "langsearch",
-    description: "Web search and semantic reranking via LangSearch API. Use when you need to search the web for current information, research topics.",
+    description: "Web search and semantic reranking via LangSearch API.",
     createdAt: "2024-04-05T10:00:00Z",
     fileCount: 3,
   },
   {
-    id: "2", 
+    id: "2",
     name: "code-review",
-    description: "Automated code review with best practices checking, security analysis, and improvement suggestions.",
+    description: "Automated code review with best practices checking.",
     createdAt: "2024-04-04T15:30:00Z",
     fileCount: 1,
   },
+];
+
+// Static placeholder integrations
+const PLACEHOLDER_INTEGRATIONS = [
   {
-    id: "3",
-    name: "api-docs",
-    description: "Generate API documentation from OpenAPI specs with examples and interactive snippets.",
-    createdAt: "2024-04-03T09:15:00Z",
-    fileCount: 2,
+    id: "github",
+    name: "GitHub",
+    description: "Access repositories, issues, and pull requests",
+    icon: "🐙",
+    connected: true,
+  },
+  {
+    id: "linear",
+    name: "Linear",
+    description: "Manage issues and projects",
+    icon: "📋",
+    connected: false,
+  },
+  {
+    id: "slack",
+    name: "Slack",
+    description: "Send messages and notifications",
+    icon: "💬",
+    connected: false,
+  },
+  {
+    id: "notion",
+    name: "Notion",
+    description: "Access pages and databases",
+    icon: "📝",
+    connected: true,
   },
 ];
 
-export function SkillsPage({ workspaceName, onBack }: SkillsPageProps) {
+export function SkillsPage({ workspaceName }: SkillsPageProps) {
+  const [activeTab, setActiveTab] = useState<"skills" | "integrations">("skills");
   const [searchQuery, setSearchQuery] = useState("");
   const [showUploadModal, setShowUploadModal] = useState(false);
 
@@ -56,21 +84,59 @@ export function SkillsPage({ workspaceName, onBack }: SkillsPageProps) {
     skill.description.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  // Filter integrations based on search
+  const filteredIntegrations = PLACEHOLDER_INTEGRATIONS.filter((int) =>
+    int.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const connectedCount = PLACEHOLDER_INTEGRATIONS.filter((i) => i.connected).length;
+
   return (
     <div className="flex-1 flex flex-col bg-white overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-200">
         <div className="flex items-center gap-3">
-          <h1 className="text-lg font-medium text-zinc-900">Skills</h1>
+          <h1 className="text-lg font-medium text-zinc-900">Skills & Integrations</h1>
           <span className="text-sm text-zinc-400">•</span>
           <span className="text-sm text-zinc-500">{workspaceName}</span>
         </div>
+        {activeTab === "skills" && (
+          <button
+            onClick={() => setShowUploadModal(true)}
+            className="flex items-center gap-2 bg-zinc-900 text-white text-sm font-medium py-2 px-4 rounded-lg hover:bg-zinc-800 transition-colors"
+          >
+            <Plus className="w-4 h-4" strokeWidth={1.5} />
+            Upload Skill
+          </button>
+        )}
+      </div>
+
+      {/* Tabs */}
+      <div className="flex items-center gap-6 px-6 py-3 border-b border-zinc-100">
         <button
-          onClick={() => setShowUploadModal(true)}
-          className="flex items-center gap-2 bg-zinc-900 text-white text-sm font-medium py-2 px-4 rounded-lg hover:bg-zinc-800 transition-colors"
+          onClick={() => setActiveTab("skills")}
+          className={`text-sm font-medium transition-colors ${
+            activeTab === "skills"
+              ? "text-zinc-900"
+              : "text-zinc-400 hover:text-zinc-600"
+          }`}
         >
-          <Plus className="w-4 h-4" strokeWidth={1.5} />
-          Upload Skill
+          Skills
+        </button>
+        <button
+          onClick={() => setActiveTab("integrations")}
+          className={`text-sm font-medium transition-colors flex items-center gap-2 ${
+            activeTab === "integrations"
+              ? "text-zinc-900"
+              : "text-zinc-400 hover:text-zinc-600"
+          }`}
+        >
+          Integrations
+          {connectedCount > 0 && (
+            <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full">
+              {connectedCount}
+            </span>
+          )}
         </button>
       </div>
 
@@ -80,7 +146,7 @@ export function SkillsPage({ workspaceName, onBack }: SkillsPageProps) {
           <Search className="w-4 h-4 text-zinc-400" strokeWidth={1.5} />
           <input
             type="text"
-            placeholder="Search skills..."
+            placeholder={activeTab === "skills" ? "Search skills..." : "Search integrations..."}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="bg-transparent border-none outline-none text-sm text-zinc-900 w-full placeholder-zinc-400"
@@ -88,31 +154,39 @@ export function SkillsPage({ workspaceName, onBack }: SkillsPageProps) {
         </div>
       </div>
 
-      {/* Skills Grid */}
+      {/* Content */}
       <div className="flex-1 overflow-y-auto p-6">
-        {filteredSkills.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-center">
-            <FileCode className="w-12 h-12 text-zinc-300 mb-4" strokeWidth={1} />
-            <h3 className="text-base font-medium text-zinc-900 mb-1">No skills found</h3>
-            <p className="text-sm text-zinc-500 mb-4">
-              {searchQuery
-                ? "Try a different search term"
-                : "Upload your first skill to get started"}
-            </p>
-            {!searchQuery && (
-              <button
-                onClick={() => setShowUploadModal(true)}
-                className="flex items-center gap-2 bg-zinc-100 text-zinc-700 text-sm font-medium py-2 px-4 rounded-lg hover:bg-zinc-200 transition-colors"
-              >
-                <Upload className="w-4 h-4" strokeWidth={1.5} />
-                Upload Skill
-              </button>
-            )}
-          </div>
+        {activeTab === "skills" ? (
+          /* Skills Grid */
+          filteredSkills.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full text-center">
+              <FileCode className="w-12 h-12 text-zinc-300 mb-4" strokeWidth={1} />
+              <h3 className="text-base font-medium text-zinc-900 mb-1">No skills found</h3>
+              <p className="text-sm text-zinc-500 mb-4">
+                {searchQuery ? "Try a different search term" : "Upload your first skill"}
+              </p>
+              {!searchQuery && (
+                <button
+                  onClick={() => setShowUploadModal(true)}
+                  className="flex items-center gap-2 bg-zinc-100 text-zinc-700 text-sm font-medium py-2 px-4 rounded-lg hover:bg-zinc-200 transition-colors"
+                >
+                  <Upload className="w-4 h-4" strokeWidth={1.5} />
+                  Upload Skill
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredSkills.map((skill) => (
+                <SkillCard key={skill.id} skill={skill} />
+              ))}
+            </div>
+          )
         ) : (
+          /* Integrations Grid */
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredSkills.map((skill) => (
-              <SkillCard key={skill.id} skill={skill} />
+            {filteredIntegrations.map((integration) => (
+              <IntegrationCard key={integration.id} integration={integration} />
             ))}
           </div>
         )}
@@ -164,7 +238,6 @@ function SkillCard({ skill }: SkillCardProps) {
           </div>
         </div>
         
-        {/* Menu */}
         <div className="relative">
           <button
             onClick={() => setShowMenu(!showMenu)}
@@ -194,13 +267,57 @@ function SkillCard({ skill }: SkillCardProps) {
         </div>
       </div>
       
-      <p className="text-xs text-zinc-500 line-clamp-2 mb-3">
-        {skill.description}
-      </p>
+      <p className="text-xs text-zinc-500 line-clamp-2 mb-3">{skill.description}</p>
+      <p className="text-[10px] text-zinc-400">Added {formatDate(skill.createdAt)}</p>
+    </div>
+  );
+}
+
+// ============================================
+// Integration Card
+// ============================================
+
+interface IntegrationCardProps {
+  integration: {
+    id: string;
+    name: string;
+    description: string;
+    icon: string;
+    connected: boolean;
+  };
+}
+
+function IntegrationCard({ integration }: IntegrationCardProps) {
+  return (
+    <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-4 hover:border-zinc-300 transition-colors">
+      <div className="flex items-start justify-between mb-3">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-white border border-zinc-200 flex items-center justify-center text-lg">
+            {integration.icon}
+          </div>
+          <div>
+            <h3 className="text-sm font-medium text-zinc-900">{integration.name}</h3>
+            {integration.connected && (
+              <span className="text-[10px] text-green-600 flex items-center gap-1">
+                <Check className="w-3 h-3" strokeWidth={2} />
+                Connected
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
       
-      <p className="text-[10px] text-zinc-400">
-        Added {formatDate(skill.createdAt)}
-      </p>
+      <p className="text-xs text-zinc-500 mb-3">{integration.description}</p>
+      
+      <button
+        className={`w-full py-2 rounded-lg text-sm font-medium transition-colors ${
+          integration.connected
+            ? "bg-zinc-200 text-zinc-600 hover:bg-zinc-300"
+            : "bg-zinc-900 text-white hover:bg-zinc-800"
+        }`}
+      >
+        {integration.connected ? "Disconnect" : "Connect"}
+      </button>
     </div>
   );
 }
@@ -215,7 +332,7 @@ interface UploadSkillModalProps {
 
 function UploadSkillModal({ onClose }: UploadSkillModalProps) {
   const [dragActive, setDragActive] = useState(false);
-  const [files, setFiles] = useState<Array<{ name: string; content: string }>>([]);
+  const [files, setFiles] = useState<Array<{ name: string }>>([]);
   const [skillContent, setSkillContent] = useState(`---
 name: my-skill
 description: Describe what this skill does
@@ -229,11 +346,7 @@ Instructions for the AI go here.
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (e.type === "dragenter" || e.type === "dragover") {
-      setDragActive(true);
-    } else if (e.type === "dragleave") {
-      setDragActive(false);
-    }
+    setDragActive(e.type === "dragenter" || e.type === "dragover");
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -241,17 +354,14 @@ Instructions for the AI go here.
     e.stopPropagation();
     setDragActive(false);
     
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      // Handle file upload (static - just show filename)
-      const file = e.dataTransfer.files[0];
-      setFiles([...files, { name: file.name, content: "" }]);
+    if (e.dataTransfer.files?.[0]) {
+      setFiles([...files, { name: e.dataTransfer.files[0].name }]);
     }
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      setFiles([...files, { name: file.name, content: "" }]);
+    if (e.target.files?.[0]) {
+      setFiles([...files, { name: e.target.files[0].name }]);
     }
   };
 
@@ -274,9 +384,7 @@ Instructions for the AI go here.
           {/* File Drop Zone */}
           <div
             className={`border-2 border-dashed rounded-xl p-6 text-center transition-colors ${
-              dragActive
-                ? "border-zinc-400 bg-zinc-50"
-                : "border-zinc-200 hover:border-zinc-300"
+              dragActive ? "border-zinc-400 bg-zinc-50" : "border-zinc-200 hover:border-zinc-300"
             }`}
             onDragEnter={handleDrag}
             onDragLeave={handleDrag}
@@ -284,40 +392,28 @@ Instructions for the AI go here.
             onDrop={handleDrop}
           >
             <Upload className="w-8 h-8 text-zinc-300 mx-auto mb-3" strokeWidth={1} />
-            <p className="text-sm text-zinc-600 mb-2">
-              Drag and drop SKILL.md or ZIP file
-            </p>
+            <p className="text-sm text-zinc-600 mb-2">Drag and drop SKILL.md or ZIP file</p>
             <p className="text-xs text-zinc-400 mb-3">or</p>
             <label className="inline-flex items-center gap-2 bg-zinc-100 text-zinc-700 text-sm font-medium py-2 px-4 rounded-lg hover:bg-zinc-200 transition-colors cursor-pointer">
               <Upload className="w-4 h-4" strokeWidth={1.5} />
               Browse files
-              <input
-                type="file"
-                className="hidden"
-                accept=".md,.zip"
-                onChange={handleFileUpload}
-              />
+              <input type="file" className="hidden" accept=".md,.zip" onChange={handleFileUpload} />
             </label>
           </div>
 
           {/* Uploaded Files */}
           {files.length > 0 && (
-            <div className="space-y-2">
-              <label className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
-                Uploaded Files
-              </label>
-              <div className="bg-zinc-50 rounded-lg p-2 space-y-1">
-                {files.map((file, index) => (
-                  <div key={index} className="flex items-center gap-2 text-sm text-zinc-600">
-                    <FileCode className="w-4 h-4 text-zinc-400" strokeWidth={1.5} />
-                    {file.name}
-                  </div>
-                ))}
-              </div>
+            <div className="bg-zinc-50 rounded-lg p-2 space-y-1">
+              {files.map((file, index) => (
+                <div key={index} className="flex items-center gap-2 text-sm text-zinc-600">
+                  <FileCode className="w-4 h-4 text-zinc-400" strokeWidth={1.5} />
+                  {file.name}
+                </div>
+              ))}
             </div>
           )}
 
-          {/* Or Create New */}
+          {/* Divider */}
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
               <div className="w-full border-t border-zinc-200" />
@@ -335,7 +431,7 @@ Instructions for the AI go here.
             <textarea
               value={skillContent}
               onChange={(e) => setSkillContent(e.target.value)}
-              className="w-full h-48 bg-zinc-50 border border-zinc-200 rounded-lg p-3 text-sm font-mono text-zinc-800 resize-none focus:outline-none focus:ring-2 focus:ring-zinc-200"
+              className="w-full h-40 bg-zinc-50 border border-zinc-200 rounded-lg p-3 text-sm font-mono text-zinc-800 resize-none focus:outline-none focus:ring-2 focus:ring-zinc-200"
               placeholder="---&#10;name: my-skill&#10;description: ...&#10;---&#10;&#10;# Instructions"
             />
           </div>
@@ -349,9 +445,7 @@ Instructions for the AI go here.
           >
             Cancel
           </button>
-          <button
-            className="bg-zinc-900 text-white text-sm font-medium py-2 px-4 rounded-lg hover:bg-zinc-800 transition-colors"
-          >
+          <button className="bg-zinc-900 text-white text-sm font-medium py-2 px-4 rounded-lg hover:bg-zinc-800 transition-colors">
             Upload Skill
           </button>
         </div>

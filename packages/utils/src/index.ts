@@ -93,7 +93,7 @@ interface ApiMessageResponse {
   content: string;
   reasoning?: string;
   toolCalls?: ToolCall[];
-  inlineToolCalls?: ToolCall[];
+  blocks?: Message['blocks'];
 }
 
 /**
@@ -106,7 +106,7 @@ function transformApiMessage(msg: ApiMessageResponse): Message {
     content: msg.content || '',
     reasoning: msg.reasoning,
     toolCalls: msg.toolCalls,
-    inlineToolCalls: msg.inlineToolCalls,
+    blocks: msg.blocks,
   };
 }
 

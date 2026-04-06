@@ -64,11 +64,11 @@ export interface ProviderModels {
 export interface Message {
   id: string;
   role: "user" | "assistant";
-  content: string;
+  blocks?: MessageBlock[]; // Interleaved text and tool blocks
+  content?: string; // Deprecated: use blocks instead
   html?: string;
   toolCalls?: ToolCall[];
   reasoning?: string; // Thinking/reasoning content
-  inlineToolCalls?: InlineToolCall[]; // Tool calls displayed inline
 }
 
 // Inline tool call within a message
@@ -78,6 +78,22 @@ export interface InlineToolCall {
   input: Record<string, unknown>;
   status: "running" | "success" | "error";
   result?: unknown;
+  startTime: number; // Unix timestamp (ms) when tool started
+  duration?: number; // Duration in seconds, set on completion
+  errorMessage?: string; // Friendly error message for display
+}
+
+// Block types for interleaved rendering
+export type MessageBlock = TextBlock | ToolBlock;
+
+export interface TextBlock {
+  type: "text";
+  content: string;
+}
+
+export interface ToolBlock {
+  type: "tool";
+  toolCall: InlineToolCall;
 }
 
 export interface Chat {
