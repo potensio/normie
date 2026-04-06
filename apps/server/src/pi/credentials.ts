@@ -147,104 +147,61 @@ export interface BedrockResolvedCredentials extends ResolvedCredentials {
 /**
  * Resolve AWS Bedrock credentials.
  * 
- * Supports two auth modes:
- * 1. Profile - AWS profile name
- * 2. Credentials - Access Key + Secret Key + Region
+ * IMPORTANT: AWS Bedrock uses environment variables for credentials.
+ * User-stored credentials in DB are NOT supported - only owner-managed env vars.
  * 
- * For access key auth, we return the credentials in `bedrockCredentials`
- * which will be injected into the AWS SDK client at runtime.
+ * Required environment variables:
+ * - AWS_ACCESS_KEY_ID
+ * - AWS_SECRET_ACCESS_KEY
+ * - AWS_REGION (defaults to us-east-1)
+ * 
+ * AWS SDK reads these automatically via its default credential chain.
  */
 async function resolveBedrockCredentials(
-  storedKey: string | null
+  _storedKey: string | null // Ignored - Bedrock is owner-managed only
 ): Promise<BedrockResolvedCredentials> {
-  console.log('[BedrockCredentials] Resolving, hasStoredKey:', !!storedKey);
+  console.log('[BedrockCredentials] Resolving credentials...');
   
-  // If user has stored credentials
-  if (storedKey) {
-    try {
-      const creds = JSON.parse(storedKey);
-      console.log('[BedrockCredentials] Parsed credentials:', {
-        authMode: creds.authMode,
-        hasAccessKey: !!creds.accessKey,
-        hasSecretKey: !!creds.secretKey,
-        profile: creds.profile,
-        region: creds.region,
-      });
-      
-      if (creds.authMode === 'profile') {
-        // Profile-based auth - pass through to Bedrock
-        console.log('[BedrockCredentials] Using profile-based auth:', creds.profile || 'default');
-        return {
-          configured: true,
-          source: 'user',
-          streamOptions: {
-            profile: creds.profile || 'default',
-          },
-        };
-      } else {
-        // Access key auth - validate required fields
-        if (!creds.accessKey || !creds.secretKey) {
-          console.log('[BedrockCredentials] Missing access key or secret key');
-          return {
-            configured: false,
-            source: 'none',
-            error: 'AWS credentials require both Access Key and Secret Key',
-          };
-        }
-        
-        console.log('[BedrockCredentials] Using access key auth for region:', creds.region || 'us-east-1');
-        
-        // Return credentials for runtime injection
-        // The bedrockCredentials will be used to configure the AWS SDK client
-        return {
-          configured: true,
-          source: 'user',
-          streamOptions: {
-            region: creds.region || 'us-east-1',
-          },
-          bedrockCredentials: {
-            accessKeyId: creds.accessKey,
-            secretAccessKey: creds.secretKey,
-            region: creds.region || 'us-east-1',
-            sessionToken: creds.sessionToken,
-          },
-        };
-      }
-    } catch (err) {
-      return {
-        configured: false,
-        source: 'none',
-        error: 'Invalid Bedrock credentials format',
-      };
-    }
+  // Priority 1: Bedrock Mantle API Key (recommended)
+  // This is OpenAI-compatible API, not native Bedrock
+  if (process.env.BEDROCK_API_KEY && process.env.BEDROCK_BASE_URL) {
+    console.log('[BedrockCredentials] Using Mantle API (OpenAI-compatible)');
+    console.log(`[BedrockCredentials]   API Key: ***${process.env.BEDROCK_API_KEY.slice(-8)}`);
+    console.log(`[BedrockCredentials]   Base URL: ${process.env.BEDROCK_BASE_URL}`);
+    
+    return {
+      configured: true,
+      source: 'env',
+      streamOptions: {
+        region: 'mantle', // Indicates Mantle API
+        useMantle: true,
+      },
+    };
   }
   
-  // Check for environment credentials (AWS SDK default chain)
+  // Priority 2: Native Bedrock via AWS credentials
   if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
+    const region = process.env.AWS_REGION || 'us-east-1';
+    console.log(`[BedrockCredentials] Using native Bedrock (Converse API)`);
+    console.log(`[BedrockCredentials]   Access Key: ***${process.env.AWS_ACCESS_KEY_ID.slice(-4)}`);
+    console.log(`[BedrockCredentials]   Region: ${region}`);
+    
     return {
       configured: true,
       source: 'env',
       streamOptions: {
-        region: process.env.AWS_REGION || 'us-east-1',
+        region,
+        useMantle: false,
       },
     };
   }
   
-  // Check for AWS profile
-  if (process.env.AWS_PROFILE) {
-    return {
-      configured: true,
-      source: 'env',
-      streamOptions: {
-        profile: process.env.AWS_PROFILE,
-      },
-    };
-  }
-  
+  // No credentials configured
+  console.log('[BedrockCredentials] No credentials found');
   return {
     configured: false,
     source: 'none',
-    error: 'No AWS Bedrock credentials configured. Add your credentials in Settings > Providers.',
+    error: 'AWS Bedrock credentials not configured. Set BEDROCK_API_KEY for Mantle or AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY for native.',
   };
 }
 
