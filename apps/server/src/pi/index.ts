@@ -5,9 +5,8 @@
  * and initializing the Pi Agent on server startup.
  * 
  * Credential Flow:
- * - Simple API keys (Anthropic, OpenAI, etc): Injected via AuthStorage.inMemory()
- * - AWS Bedrock Mantle: Uses BEDROCK_API_KEY + BEDROCK_BASE_URL (OpenAI-compatible API)
- * - AWS Bedrock Native: Uses environment variables (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION)
+ * - Simple API key providers (Anthropic, OpenAI, etc): Injected via AuthStorage.inMemory()
+ * - AWS Bedrock: Uses BEDROCK_API_KEY + BEDROCK_BASE_URL (OpenAI-compatible Mantle API)
  * - Owner-managed: Bedrock credentials are server-level, not user-configurable
  */
 
@@ -84,18 +83,17 @@ function getAuthProviderId(piProvider: string): string {
 }
 
 /**
- * Check if provider uses environment variables for credentials.
- * AWS Bedrock reads from env vars directly via AWS SDK.
+ * Check if provider uses Mantle API (OpenAI-compatible).
  */
-function isEnvBasedProvider(piProvider: string): boolean {
-  return piProvider === 'amazon-bedrock' || piProvider === 'azure-openai-responses';
+function isMantleProvider(piProvider: string): boolean {
+  return piProvider === 'amazon-bedrock';
 }
 
 /**
  * Create an AuthStorage with pre-injected credentials.
  * 
- * Note: AWS Bedrock is NOT handled here - it uses environment variables
- * directly via AWS SDK credential chain.
+ * Note: AWS Bedrock uses Mantle API (OpenAI-compatible) and is handled
+ * separately in runPiQuery(), not via AuthStorage.
  */
 function createAuthStorageWithCredentials(
   provider: string,
@@ -109,9 +107,9 @@ function createAuthStorageWithCredentials(
   // Build auth data for in-memory storage
   const authData: Record<string, { type: 'api_key'; key: string }> = {};
   
-  // Skip environment-based providers (they read from process.env directly)
-  if (isEnvBasedProvider(provider)) {
-    console.log(`[PiAgent:AuthStorage] Provider ${provider} uses environment variables - skipping AuthStorage injection`);
+  // Skip Mantle providers (they use custom streaming logic)
+  if (isMantleProvider(provider)) {
+    console.log(`[PiAgent:AuthStorage] Provider ${provider} uses Mantle API - skipping AuthStorage injection`);
     return AuthStorage.inMemory({});
   }
   
@@ -169,10 +167,10 @@ export async function* runPiQuery(
   console.log(`[PiAgent] Pi provider ID: ${piProvider}`);
 
   // Check if this is an environment-based provider
-  const isEnvProvider = isEnvBasedProvider(piProvider);
+  const isMantle = isMantleProvider(piProvider);
   
   // Validate credentials
-  if (!credentials.configured && !isEnvProvider) {
+  if (!credentials.configured && !isMantle) {
     console.error('[PiAgent] ERROR: Credentials not configured');
     yield {
       type: 'error',
@@ -183,22 +181,12 @@ export async function* runPiQuery(
   }
 
   console.log(`[PiAgent] Credentials source: ${credentials.source}`);
-  console.log(`[PiAgent] Is environment-based provider: ${isEnvProvider}`);
 
-  // For Bedrock, check if using Mantle or native
-  if (piProvider === 'amazon-bedrock') {
-    const useMantle = credentials.streamOptions?.useMantle === true;
-    
-    if (useMantle) {
-      console.log(`[PiAgent] Using Bedrock Mantle (OpenAI-compatible API)`);
-      console.log(`[PiAgent]   BEDROCK_API_KEY: ${process.env.BEDROCK_API_KEY ? '***' + process.env.BEDROCK_API_KEY.slice(-8) : 'NOT SET'}`);
-      console.log(`[PiAgent]   BEDROCK_BASE_URL: ${process.env.BEDROCK_BASE_URL || 'NOT SET'}`);
-    } else {
-      console.log(`[PiAgent] Using native Bedrock (Converse API)`);
-      console.log(`[PiAgent]   AWS_ACCESS_KEY_ID: ${process.env.AWS_ACCESS_KEY_ID ? '***' + process.env.AWS_ACCESS_KEY_ID.slice(-4) : 'NOT SET'}`);
-      console.log(`[PiAgent]   AWS_SECRET_ACCESS_KEY: ${process.env.AWS_SECRET_ACCESS_KEY ? '[SET]' : 'NOT SET'}`);
-      console.log(`[PiAgent]   AWS_REGION: ${process.env.AWS_REGION || 'us-east-1'}`);
-    }
+  // Log Bedrock Mantle config
+  if (isMantle) {
+    console.log(`[PiAgent] Using Bedrock Mantle (OpenAI-compatible API)`);
+    console.log(`[PiAgent]   BEDROCK_API_KEY: ${process.env.BEDROCK_API_KEY ? '***' + process.env.BEDROCK_API_KEY.slice(-8) : 'NOT SET'}`);
+    console.log(`[PiAgent]   BEDROCK_BASE_URL: ${process.env.BEDROCK_BASE_URL || 'NOT SET'}`);
   }
 
   // Get validated model
@@ -240,12 +228,8 @@ export async function* runPiQuery(
   // Create AuthStorage with injected credentials
   const authStorage = createAuthStorageWithCredentials(piProvider, credentials);
 
-  // CHECK: Use Bedrock Mantle (OpenAI-compatible API) if configured
-  const useMantle = piProvider === 'amazon-bedrock' && credentials.streamOptions?.useMantle === true;
-  
-  if (useMantle) {
-    console.log('[PiAgent] Using Bedrock Mantle provider (OpenAI-compatible API)');
-    
+  // Bedrock always uses Mantle (OpenAI-compatible API)
+  if (isMantle) {
     // Get Mantle config
     const mantleConfig = getBedrockMantleConfig();
     if (!mantleConfig) {
@@ -273,13 +257,15 @@ export async function* runPiQuery(
       });
     }
     
-    // Create Mantle config with model
+    // Create Mantle config with model and tools
     const mantleConfigWithModel = {
       ...mantleConfig,
       model: piModel.id, // Use the model ID directly (e.g., 'zai.glm-5')
+      tools, // Pass tools for function calling support
     };
     
     console.log(`[PiAgent] Streaming from Mantle with model: ${mantleConfigWithModel.model}`);
+    console.log(`[PiAgent] Tools passed to Mantle: ${tools.length}`);
     
     // Stream from Mantle and yield chunks
     try {
@@ -348,12 +334,26 @@ export async function* runPiQuery(
   const unsubscribe = session.subscribe((event: AgentSessionEvent) => {
     console.log(`[PiAgent:Event] Received: ${event.type}`);
     
+    // Log tool execution events specially
+    if (event.type === 'tool_execution_start') {
+      const te = event as any;
+      console.log(`[PiAgent:Event] TOOL EXECUTION START - ID: ${te.toolCallId}`);
+    }
+    if (event.type === 'tool_execution_end') {
+      const te = event as any;
+      console.log(`[PiAgent:Event] TOOL EXECUTION END - ID: ${te.toolCallId}, Error: ${te.isError}`);
+    }
+    
     // Log full event for debugging
     if (event.type === 'agent_end') {
       console.log(`[PiAgent:Event] Full agent_end event:`, JSON.stringify(event, null, 2));
     }
     if (event.type === 'message_update') {
-      console.log(`[PiAgent:Event] Full message_update event:`, JSON.stringify(event, null, 2));
+      const me = event as any;
+      // Log toolcall_start events
+      if (me.assistantMessageEvent?.type === 'toolcall_start') {
+        console.log(`[PiAgent:Event] TOOLCALL START - Tool requested!`);
+      }
     }
     
     // Translate to StreamChunk
@@ -545,13 +545,13 @@ export async function initializePiAgent(): Promise<void> {
   console.log(`  Default model: ${config.defaultModel}`);
   console.log(`  Enabled providers: ${config.enabledProviders.join(", ")}`);
 
-  // Log AWS Bedrock configuration
-  if (process.env.AWS_ACCESS_KEY_ID) {
-    console.log("[PiAgent] AWS Bedrock configured:");
-    console.log(`  Access Key: ***${process.env.AWS_ACCESS_KEY_ID.slice(-4)}`);
-    console.log(`  Region: ${process.env.AWS_REGION || 'us-east-1'}`);
+  // Log AWS Bedrock Mantle configuration
+  if (process.env.BEDROCK_API_KEY && process.env.BEDROCK_BASE_URL) {
+    console.log("[PiAgent] AWS Bedrock Mantle configured:");
+    console.log(`  API Key: ***${process.env.BEDROCK_API_KEY.slice(-8)}`);
+    console.log(`  Base URL: ${process.env.BEDROCK_BASE_URL}`);
   } else {
-    console.log("[PiAgent] AWS Bedrock: Not configured (no AWS_ACCESS_KEY_ID)");
+    console.log("[PiAgent] AWS Bedrock Mantle: Not configured (need BEDROCK_API_KEY and BEDROCK_BASE_URL)");
   }
 
   // Try to get default model info

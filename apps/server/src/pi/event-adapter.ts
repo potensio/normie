@@ -225,11 +225,15 @@ export class EventAdapter {
    * We've already emitted tool_use in toolcall_start, so this is just for tracking.
    */
   private handleToolExecutionStart(
-    _event: Extract<AgentEvent, { type: 'tool_execution_start' }>
+    event: Extract<AgentEvent, { type: 'tool_execution_start' }>
   ): StreamChunk | null {
-    // Tool execution started - we already emitted tool_use in toolcall_start.
-    // This event can be used for execution tracking if needed.
-    // The frontend expects tool_use to come before tool_result.
+    // Log tool execution start for debugging
+    const toolContext = this.currentToolCalls.get(event.toolCallId);
+    console.log('='.repeat(60));
+    console.log(`[Tool:EXECUTE] Tool name: ${toolContext?.name || 'unknown'}`);
+    console.log(`[Tool:EXECUTE] Tool call ID: ${event.toolCallId}`);
+    console.log(`[Tool:EXECUTE] Input:`, JSON.stringify(toolContext?.input, null, 2));
+    console.log('='.repeat(60));
     return null;
   }
 
@@ -241,6 +245,19 @@ export class EventAdapter {
     event: Extract<AgentEvent, { type: 'tool_execution_end' }>
   ): StreamChunk {
     const { toolCallId, result, isError } = event;
+
+    // Log tool execution result for debugging
+    const toolContext = this.currentToolCalls.get(toolCallId);
+    console.log('='.repeat(60));
+    console.log(`[Tool:RESULT] Tool name: ${toolContext?.name || 'unknown'}`);
+    console.log(`[Tool:RESULT] Success: ${!isError}`);
+    if (isError) {
+      console.log(`[Tool:RESULT] Error:`, typeof result === 'string' ? result : JSON.stringify(result, null, 2));
+    } else {
+      const resultStr = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+      console.log(`[Tool:RESULT] Result (first 500 chars):`, resultStr?.substring(0, 500));
+    }
+    console.log('='.repeat(60));
 
     // Format result for frontend
     let formattedResult: unknown;

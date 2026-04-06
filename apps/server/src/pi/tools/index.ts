@@ -85,9 +85,11 @@ export async function buildWorkspaceTools(
     if (readOnlyMode) {
       // Read-only mode: only include safe tools
       tools.push(...readOnlyTools);
+      console.log('[ToolSystem] Added readOnlyTools:', readOnlyTools.map(t => t.name).join(', '));
     } else {
       // Full mode: include all coding tools
       tools.push(...codingTools);
+      console.log('[ToolSystem] Added codingTools:', codingTools.map(t => t.name).join(', '));
     }
   }
 
