@@ -3,6 +3,8 @@ import { getDb, type DbClient } from '../db/index.js';
 import * as schema from '../db/schema.js';
 import { getContextMemories } from './memory-search.js';
 import { APPLICATION_PROMPT } from '../prompts/system.js';
+import { SkillService } from './skill-service.js';
+import { buildSkillsPrompt } from './skill-prompt-builder.js';
 
 // Type for the database instance
 type DbType = DbClient;
@@ -102,6 +104,21 @@ export async function buildSystemContext(
 
   if (todayNote?.content?.trim()) {
     parts.push(`## Today\n\n${todayNote.content.trim()}`);
+  }
+
+  // 7. Load workspace skills
+  try {
+    const skillService = new SkillService(db);
+    const skills = await skillService.loadForPrompt(workspaceId);
+    
+    if (skills.length > 0) {
+      const skillsPrompt = buildSkillsPrompt(skills);
+      parts.push(skillsPrompt);
+      console.log(`[CONTEXT] Loaded ${skills.length} skills`);
+    }
+  } catch (error) {
+    console.error('[CONTEXT] Error loading skills:', error);
+    // Continue without skills if there's an error
   }
 
   // Return assembled context (always has at least APPLICATION_PROMPT)

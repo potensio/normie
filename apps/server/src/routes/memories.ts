@@ -1,366 +1,219 @@
+/**
+ * Memory Routes
+ * 
+ * Thin HTTP layer that delegates to memory service.
+ * All business logic is in services/memory.service.ts
+ */
+
 import { Router, Request, Response } from 'express';
-import { eq, and, desc } from 'drizzle-orm';
 import { requireAuth, requireWorkspaceAccess } from '../auth/index.js';
 import { getDb } from '../db/index.js';
-import * as schema from '../db/schema.js';
-import { searchMemories, storeMemory, searchDailyNotes, getContextMemories } from '../services/memory-search.js';
+import {
+  NotFoundError,
+  ForbiddenError,
+  ValidationError,
+  asyncHandler
+} from '../middleware/index.js';
+import {
+  listMemories,
+  getMemoryById,
+  createMemory,
+  createMemoryWithEmbedding,
+  deleteMemory,
+  getDailyNote,
+  saveDailyNote,
+  searchWorkspaceMemories,
+  searchWorkspaceDailyNotes,
+  getAIContext,
+  verifyMemoryAccess,
+  verifyMemoryWriteAccess,
+  type CreateMemoryInput,
+  type SaveDailyNoteInput,
+  type ListMemoriesOptions,
+  type SearchMemoriesOptions
+} from '../services/memory.service.js';
 
 const router = Router();
 
 router.use(requireAuth);
 
-// Request body types
-interface CreateMemoryBody {
-  content: string;
-  memoryType?: string;
-  sourceChatId?: string;
-  importance?: number;
-}
+// ============================================
+// Helper
+// ============================================
 
-interface SaveDailyNoteBody {
-  content: string;
-}
-
-// Query parameter types
-interface ListMemoriesQuery {
-  type?: string;
-  limit?: string;
-  offset?: string;
-}
-
-interface SearchQuery {
-  q?: string;
-  limit?: string;
-  threshold?: string;
-  types?: string;
-}
-
-interface ContextQuery {
-  memoryLimit?: string;
-  daysLimit?: string;
+function getStringParam(value: string | string[] | undefined): string {
+  if (!value) return '';
+  if (Array.isArray(value)) return value[0] || '';
+  return value;
 }
 
 // ============================================
 // LIST MEMORIES
 // ============================================
-router.get('/workspace/:workspaceId', requireWorkspaceAccess, async (req: Request, res: Response) => {
-  try {
-    const workspaceId = req.params.workspaceId as string;
-    const { type, limit = '50', offset = '0' } = req.query as ListMemoriesQuery;
-    const db = getDb();
+router.get('/workspace/:workspaceId', requireWorkspaceAccess, asyncHandler(async (req: Request, res: Response) => {
+  const workspaceId = getStringParam(req.params.workspaceId);
+  const { type, limit, offset } = req.query;
 
-    let memories;
+  const options: ListMemoriesOptions = {
+    type: type as string | undefined,
+    limit: limit ? parseInt(limit as string) : 50,
+    offset: offset ? parseInt(offset as string) : 0
+  };
 
-    if (type) {
-      memories = await db.select()
-        .from(schema.memories)
-        .where(and(
-          eq(schema.memories.workspaceId, workspaceId),
-          eq(schema.memories.memoryType, type)
-        ))
-        .orderBy(desc(schema.memories.createdAt))
-        .limit(parseInt(limit))
-        .offset(parseInt(offset));
-    } else {
-      memories = await db.select()
-        .from(schema.memories)
-        .where(eq(schema.memories.workspaceId, workspaceId))
-        .orderBy(desc(schema.memories.createdAt))
-        .limit(parseInt(limit))
-        .offset(parseInt(offset));
-    }
-
-    res.json({ memories });
-  } catch (err) {
-    console.error('[MEMORY] List error:', err);
-    res.status(500).json({ error: 'Failed to list memories' });
-  }
-});
+  const memories = await listMemories(getDb(), workspaceId, options);
+  res.json({ memories });
+}));
 
 // ============================================
 // GET DAILY NOTE
 // ============================================
-router.get('/workspace/:workspaceId/daily/:date', requireWorkspaceAccess, async (req: Request, res: Response) => {
-  try {
-    const workspaceId = req.params.workspaceId as string;
-    const date = req.params.date as string;
-    const db = getDb();
+router.get('/workspace/:workspaceId/daily/:date', requireWorkspaceAccess, asyncHandler(async (req: Request, res: Response) => {
+  const workspaceId = getStringParam(req.params.workspaceId);
+  const date = getStringParam(req.params.date);
 
-    const [note] = await db.select()
-      .from(schema.dailyNotes)
-      .where(and(
-        eq(schema.dailyNotes.workspaceId, workspaceId),
-        eq(schema.dailyNotes.noteDate, date)
-      ));
-
-    res.json(note || { content: '', noteDate: date });
-  } catch (err) {
-    console.error('[MEMORY] Get daily note error:', err);
-    res.status(500).json({ error: 'Failed to get daily note' });
-  }
-});
+  const note = await getDailyNote(getDb(), workspaceId, date);
+  res.json(note);
+}));
 
 // ============================================
 // SAVE DAILY NOTE
 // ============================================
-router.put('/workspace/:workspaceId/daily/:date', requireWorkspaceAccess, async (req: Request, res: Response) => {
+router.put('/workspace/:workspaceId/daily/:date', requireWorkspaceAccess, asyncHandler(async (req: Request, res: Response) => {
   if (req.workspaceRole === 'viewer') {
-    return res.status(403).json({ error: 'Viewers cannot edit' });
+    throw new ForbiddenError('Viewers cannot edit');
   }
 
-  try {
-    const workspaceId = req.params.workspaceId as string;
-    const date = req.params.date as string;
-    const { content } = req.body as SaveDailyNoteBody;
-    const db = getDb();
+  const workspaceId = getStringParam(req.params.workspaceId);
+  const date = getStringParam(req.params.date);
+  const input: SaveDailyNoteInput = req.body;
 
-    const [existing] = await db.select()
-      .from(schema.dailyNotes)
-      .where(and(
-        eq(schema.dailyNotes.workspaceId, workspaceId),
-        eq(schema.dailyNotes.noteDate, date)
-      ));
-
-    if (existing) {
-      const [updated] = await db.update(schema.dailyNotes)
-        .set({ content, updatedAt: new Date() })
-        .where(eq(schema.dailyNotes.id, existing.id))
-        .returning();
-      res.json(updated);
-    } else {
-      const [created] = await db.insert(schema.dailyNotes)
-        .values({
-          workspaceId,
-          noteDate: date,
-          content
-        })
-        .returning();
-      res.json(created);
-    }
-  } catch (err) {
-    console.error('[MEMORY] Save daily note error:', err);
-    res.status(500).json({ error: 'Failed to save daily note' });
+  if (!input.content && input.content !== '') {
+    throw new ValidationError('Content required');
   }
-});
+
+  const note = await saveDailyNote(getDb(), workspaceId, date, input);
+  res.json(note);
+}));
 
 // ============================================
 // CREATE MEMORY
 // ============================================
-router.post('/workspace/:workspaceId', requireWorkspaceAccess, async (req: Request, res: Response) => {
+router.post('/workspace/:workspaceId', requireWorkspaceAccess, asyncHandler(async (req: Request, res: Response) => {
   if (req.workspaceRole === 'viewer') {
-    return res.status(403).json({ error: 'Viewers cannot create memories' });
+    throw new ForbiddenError('Viewers cannot create memories');
   }
 
-  try {
-    const workspaceId = req.params.workspaceId as string;
-    const { content, memoryType = 'note', sourceChatId, importance = 5 } = req.body as CreateMemoryBody;
+  const workspaceId = getStringParam(req.params.workspaceId);
+  const input: CreateMemoryInput = {
+    content: req.body.content,
+    memoryType: req.body.memoryType,
+    sourceChatId: req.body.sourceChatId,
+    importance: req.body.importance
+  };
 
-    if (!content) {
-      return res.status(400).json({ error: 'Content required' });
-    }
-
-    const db = getDb();
-    const [memory] = await db.insert(schema.memories)
-      .values({
-        workspaceId,
-        content,
-        memoryType,
-        sourceChatId: sourceChatId || null,
-        importance
-      })
-      .returning();
-
-    res.json(memory);
-  } catch (err) {
-    console.error('[MEMORY] Create error:', err);
-    res.status(500).json({ error: 'Failed to create memory' });
-  }
-});
-
-// ============================================
-// GET MEMORY
-// ============================================
-router.get('/:memoryId', async (req: Request, res: Response) => {
-  try {
-    const memoryId = req.params.memoryId as string;
-    const db = getDb();
-    const [memory] = await db.select()
-      .from(schema.memories)
-      .where(eq(schema.memories.id, memoryId));
-
-    if (!memory) {
-      return res.status(404).json({ error: 'Memory not found' });
-    }
-
-    // Verify workspace access
-    const [workspace] = await db.select()
-      .from(schema.workspaces)
-      .where(eq(schema.workspaces.id, memory.workspaceId));
-
-    const isOwner = workspace.ownerId === req.userId;
-    if (!isOwner) {
-      const [membership] = await db.select()
-        .from(schema.workspaceMembers)
-        .where(and(
-          eq(schema.workspaceMembers.workspaceId, workspace.id),
-          eq(schema.workspaceMembers.userId, req.userId!)
-        ));
-      if (!membership) {
-        return res.status(403).json({ error: 'Access denied' });
-      }
-    }
-
-    res.json(memory);
-  } catch (err) {
-    console.error('[MEMORY] Get error:', err);
-    res.status(500).json({ error: 'Failed to get memory' });
-  }
-});
-
-// ============================================
-// DELETE MEMORY
-// ============================================
-router.delete('/:memoryId', async (req: Request, res: Response) => {
-  try {
-    const memoryId = req.params.memoryId as string;
-    const db = getDb();
-    const [memory] = await db.select()
-      .from(schema.memories)
-      .where(eq(schema.memories.id, memoryId));
-
-    if (!memory) {
-      return res.status(404).json({ error: 'Memory not found' });
-    }
-
-    // Verify workspace access with edit permission
-    const [workspace] = await db.select()
-      .from(schema.workspaces)
-      .where(eq(schema.workspaces.id, memory.workspaceId));
-
-    const isOwner = workspace.ownerId === req.userId;
-    if (!isOwner) {
-      const [membership] = await db.select()
-        .from(schema.workspaceMembers)
-        .where(and(
-          eq(schema.workspaceMembers.workspaceId, workspace.id),
-          eq(schema.workspaceMembers.userId, req.userId!)
-        ));
-      if (!membership || membership.role === 'viewer') {
-        return res.status(403).json({ error: 'Access denied' });
-      }
-    }
-
-    await db.delete(schema.memories)
-      .where(eq(schema.memories.id, memory.id));
-
-    res.json({ success: true });
-  } catch (err) {
-    console.error('[MEMORY] Delete error:', err);
-    res.status(500).json({ error: 'Failed to delete memory' });
-  }
-});
-
-// ============================================
-// SEMANTIC SEARCH MEMORIES
-// ============================================
-router.get('/workspace/:workspaceId/search', requireWorkspaceAccess, async (req: Request, res: Response) => {
-  try {
-    const workspaceId = req.params.workspaceId as string;
-    const { q, limit = '10', threshold = '0.5', types } = req.query as SearchQuery;
-    
-    if (!q) {
-      return res.status(400).json({ error: 'Query parameter "q" required' });
-    }
-
-    const typeArray = types ? types.split(',').map(t => t.trim()) : null;
-    
-    const results = await searchMemories(workspaceId, q, {
-      limit: parseInt(limit),
-      threshold: parseFloat(threshold),
-      types: typeArray
-    });
-    
-    res.json({ results, query: q });
-  } catch (err) {
-    console.error('[MEMORY] Search error:', err);
-    res.status(500).json({ error: 'Failed to search memories' });
-  }
-});
-
-// ============================================
-// SEARCH DAILY NOTES
-// ============================================
-router.get('/workspace/:workspaceId/search-notes', requireWorkspaceAccess, async (req: Request, res: Response) => {
-  try {
-    const workspaceId = req.params.workspaceId as string;
-    const { q, limit = '10' } = req.query as SearchQuery;
-    
-    if (!q) {
-      return res.status(400).json({ error: 'Query parameter "q" required' });
-    }
-    
-    const results = await searchDailyNotes(workspaceId, q, parseInt(limit));
-    res.json({ results, query: q });
-  } catch (err) {
-    console.error('[MEMORY] Search notes error:', err);
-    res.status(500).json({ error: 'Failed to search daily notes' });
-  }
-});
-
-// ============================================
-// GET CONTEXT (for AI)
-// ============================================
-router.get('/workspace/:workspaceId/context', requireWorkspaceAccess, async (req: Request, res: Response) => {
-  try {
-    const workspaceId = req.params.workspaceId as string;
-    const { memoryLimit = '10', daysLimit = '7' } = req.query as ContextQuery;
-    
-    const context = await getContextMemories(workspaceId, {
-      memoryLimit: parseInt(memoryLimit),
-      daysLimit: parseInt(daysLimit)
-    });
-    
-    res.json(context);
-  } catch (err) {
-    console.error('[MEMORY] Context error:', err);
-    res.status(500).json({ error: 'Failed to get context' });
-  }
-});
+  const memory = await createMemory(getDb(), workspaceId, input);
+  res.json(memory);
+}));
 
 // ============================================
 // CREATE MEMORY WITH EMBEDDING
 // ============================================
-router.post('/workspace/:workspaceId/with-embedding', requireWorkspaceAccess, async (req: Request, res: Response) => {
+router.post('/workspace/:workspaceId/with-embedding', requireWorkspaceAccess, asyncHandler(async (req: Request, res: Response) => {
   if (req.workspaceRole === 'viewer') {
-    return res.status(403).json({ error: 'Viewers cannot create memories' });
+    throw new ForbiddenError('Viewers cannot create memories');
   }
 
-  try {
-    const workspaceId = req.params.workspaceId as string;
-    const { content, memoryType = 'note', sourceChatId, importance = 5 } = req.body as CreateMemoryBody;
+  const workspaceId = getStringParam(req.params.workspaceId);
+  const input: CreateMemoryInput = {
+    content: req.body.content,
+    memoryType: req.body.memoryType,
+    sourceChatId: req.body.sourceChatId,
+    importance: req.body.importance
+  };
 
-    if (!content) {
-      return res.status(400).json({ error: 'Content required' });
-    }
+  const memory = await createMemoryWithEmbedding(workspaceId, input);
+  res.json({
+    id: memory.id,
+    workspaceId: memory.workspaceId,
+    content: memory.content,
+    memoryType: memory.memoryType,
+    importance: memory.importance,
+    createdAt: memory.createdAt
+  });
+}));
 
-    const memory = await storeMemory(workspaceId, content, {
-      memoryType,
-      sourceChatId: sourceChatId || null,
-      importance
-    });
+// ============================================
+// GET MEMORY
+// ============================================
+router.get('/:memoryId', asyncHandler(async (req: Request, res: Response) => {
+  const memoryId = getStringParam(req.params.memoryId);
+  const { memory } = await verifyMemoryAccess(getDb(), memoryId, req.userId!);
+  res.json(memory);
+}));
 
-    res.json({
-      id: memory.id,
-      workspaceId: memory.workspaceId,
-      content: memory.content,
-      memoryType: memory.memoryType,
-      importance: memory.importance,
-      createdAt: memory.createdAt
-    });
-  } catch (err) {
-    console.error('[MEMORY] Create with embedding error:', err);
-    res.status(500).json({ error: 'Failed to create memory' });
+// ============================================
+// DELETE MEMORY
+// ============================================
+router.delete('/:memoryId', asyncHandler(async (req: Request, res: Response) => {
+  const memoryId = getStringParam(req.params.memoryId);
+  await verifyMemoryWriteAccess(getDb(), memoryId, req.userId!);
+  await deleteMemory(getDb(), memoryId);
+  res.json({ success: true });
+}));
+
+// ============================================
+// SEMANTIC SEARCH MEMORIES
+// ============================================
+router.get('/workspace/:workspaceId/search', requireWorkspaceAccess, asyncHandler(async (req: Request, res: Response) => {
+  const workspaceId = getStringParam(req.params.workspaceId);
+  const { q, limit, threshold, types } = req.query;
+
+  if (!q) {
+    throw new ValidationError('Query parameter "q" required');
   }
-});
+
+  const options: SearchMemoriesOptions = {
+    limit: limit ? parseInt(limit as string) : 10,
+    threshold: threshold ? parseFloat(threshold as string) : 0.5,
+    types: types ? (types as string).split(',').map(t => t.trim()) : null
+  };
+
+  const results = await searchWorkspaceMemories(workspaceId, q as string, options);
+  res.json({ results, query: q });
+}));
+
+// ============================================
+// SEARCH DAILY NOTES
+// ============================================
+router.get('/workspace/:workspaceId/search-notes', requireWorkspaceAccess, asyncHandler(async (req: Request, res: Response) => {
+  const workspaceId = getStringParam(req.params.workspaceId);
+  const { q, limit } = req.query;
+
+  if (!q) {
+    throw new ValidationError('Query parameter "q" required');
+  }
+
+  const results = await searchWorkspaceDailyNotes(
+    workspaceId,
+    q as string,
+    limit ? parseInt(limit as string) : 10
+  );
+  res.json({ results, query: q });
+}));
+
+// ============================================
+// GET CONTEXT (for AI)
+// ============================================
+router.get('/workspace/:workspaceId/context', requireWorkspaceAccess, asyncHandler(async (req: Request, res: Response) => {
+  const workspaceId = getStringParam(req.params.workspaceId);
+  const { memoryLimit, daysLimit } = req.query;
+
+  const context = await getAIContext(workspaceId, {
+    memoryLimit: memoryLimit ? parseInt(memoryLimit as string) : 10,
+    daysLimit: daysLimit ? parseInt(daysLimit as string) : 7
+  });
+
+  res.json(context);
+}));
 
 export default router;

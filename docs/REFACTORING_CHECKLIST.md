@@ -4,7 +4,101 @@ Detailed implementation steps for each refactoring priority.
 
 ---
 
-## P0: Error Handling Middleware
+## ✅ COMPLETED: Centralized Middleware
+
+### Files Created
+- `middleware/errors.ts` - Error classes + handlers
+- `middleware/resource-access.ts` - Resource loading middleware
+- `middleware/index.ts` - Barrel exports
+
+### Files Updated
+- `routes/auth.ts` - Uses asyncHandler + error classes
+- `routes/workspaces.ts` - Uses middleware + asyncHandler
+
+### Result
+- ~100 lines removed from routes
+- Consistent error handling
+- Reusable middleware
+
+---
+
+## ✅ COMPLETED: Chat Service Layer
+
+### Files Created
+- `services/chat.service.ts` (458 lines) - CRUD business logic
+- `services/chat-stream.service.ts` (517 lines) - Streaming logic
+
+### Files Updated
+- `routes/chats.ts` (227 lines, down from 863) - Thin HTTP layer
+
+### Functions in chat.service.ts
+| Function | Purpose |
+|----------|---------|
+| `getWorkspaceChats()` | List chats |
+| `getChatById()` | Get single chat |
+| `getChatWithMessages()` | Get chat + messages |
+| `createChat()` | Create new chat |
+| `updateChat()` | Update properties |
+| `switchChatModel()` | Change provider/model |
+| `deleteChat()` | Delete chat |
+| `addMessage()` | Add message |
+| `addUserMessage()` | Add user message |
+| `addAssistantMessage()` | Add assistant message |
+| `getChatMessageCount()` | Count messages |
+| `createBranch()` | Branch conversation |
+| `getChatTree()` | Get conversation tree |
+| `verifyChatAccess()` | Check read access |
+| `verifyChatWriteAccess()` | Check write access |
+
+### Functions in chat-stream.service.ts
+| Function | Purpose |
+|----------|---------|
+| `setupSSEResponse()` | Set SSE headers |
+| `sendSSEEvent()` | Send SSE chunk |
+| `startHeartbeat()` / `stopHeartbeat()` | Connection keepalive |
+| `getOrCreateStreamChat()` | Get/create chat for streaming |
+| `verifyWorkspaceAccess()` | Check workspace permission |
+| `resolveProviderCredentials()` | Get API credentials |
+| `buildStreamContext()` | Build prompt + history |
+| `saveUserMessage()` | Persist user message |
+| `saveAssistantResponse()` | Persist assistant message |
+| `shouldGenerateTitle()` | Check if title needed |
+| `generateAndSaveTitle()` | Generate chat title |
+| `streamChat()` | Main orchestrator |
+| `streamChatWithRequest()` | Request wrapper |
+
+### Separation of Concerns
+```
+Route (HTTP) → Service (Business Logic) → DB/External
+     ↓
+  - Parse params
+  - Call service
+  - Return response
+     
+Service:
+  - Validation
+  - Data operations
+  - Error handling
+```
+
+---
+
+## Remaining Work
+
+### Routes to Update (P1)
+
+#### ✅ memories.ts (Done)
+- **Before**: 366 lines (mixed concerns)
+- **After**: 218 lines (thin route) + 336 lines (service) = 554 lines
+- Created `services/memory.service.ts`
+
+#### ✅ integrations.ts (Done)
+- **Before**: 243 lines (mixed concerns)
+- **After**: 92 lines (thin route) + 290 lines (service) = 382 lines
+- Created `services/integration.service.ts`
+
+#### Remaining routes (need cleanup):
+- `api-keys.ts` - Needs review
 
 ### Goal
 Centralize error handling with consistent response shape and structured logging.

@@ -22,6 +22,7 @@ import chatRoutes from './routes/chats.js';
 import apiKeyRoutes from './routes/api-keys.js';
 import memoryRoutes from './routes/memories.js';
 import integrationRoutes from './routes/integrations.js';
+import { skillsRouter } from './routes/skills.js';
 import * as schema from './db/schema.js';
 import { eq } from 'drizzle-orm';
 import { initializePiAgent, getEnabledProviders } from './pi/index.js';
@@ -91,6 +92,7 @@ app.use('/api/chats', chatRoutes);
 app.use('/api/api-keys', apiKeyRoutes);
 app.use('/api/memories', memoryRoutes);
 app.use('/api/integrations', integrationRoutes);
+app.use('/api', skillsRouter);
 
 // ============================================
 // LEGACY CHAT ENDPOINT (deprecated - use Pi Agent instead)

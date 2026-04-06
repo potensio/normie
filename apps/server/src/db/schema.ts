@@ -222,6 +222,36 @@ export const workspaceIntegrations = pgTable('workspace_integrations', {
 ]);
 
 // ============================================
+// WORKSPACE SKILLS
+// ============================================
+export const workspaceSkills = pgTable('workspace_skills', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workspaceId: uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  name: varchar('name', { length: 64 }).notNull(),
+  description: text('description').notNull(),
+  filePath: text('file_path').notNull(), // Path to SKILL.md on disk
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull()
+}, (table) => [
+  index('idx_workspace_skills_workspace').on(table.workspaceId),
+  unique('unique_workspace_skill_name').on(table.workspaceId, table.name)
+]);
+
+// ============================================
+// WORKSPACE SKILL FILES
+// ============================================
+export const workspaceSkillFiles = pgTable('workspace_skill_files', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  skillId: uuid('skill_id').notNull().references(() => workspaceSkills.id, { onDelete: 'cascade' }),
+  relativePath: varchar('relative_path', { length: 255 }).notNull(),
+  filePath: text('file_path').notNull(), // Absolute path on disk
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull()
+}, (table) => [
+  index('idx_workspace_skill_files_skill').on(table.skillId),
+  unique('unique_skill_file_path').on(table.skillId, table.relativePath)
+]);
+
+// ============================================
 // WORKSPACE INVITES
 // ============================================
 export const workspaceInvites = pgTable('workspace_invites', {
@@ -269,7 +299,8 @@ export const workspacesRelations = relations(workspaces, ({ many, one }) => ({
   memories: many(memories),
   dailyNotes: many(dailyNotes),
   invites: many(workspaceInvites),
-  integrations: many(workspaceIntegrations)
+  integrations: many(workspaceIntegrations),
+  skills: many(workspaceSkills)
 }));
 
 export const workspaceIntegrationsRelations = relations(workspaceIntegrations, ({ one }) => ({
@@ -308,5 +339,23 @@ export const messagesRelations = relations(messages, ({ one }) => ({
   chat: one(chats, {
     fields: [messages.chatId],
     references: [chats.id]
+  })
+}));
+
+// ============================================
+// SKILL RELATIONS
+// ============================================
+export const workspaceSkillsRelations = relations(workspaceSkills, ({ one, many }) => ({
+  workspace: one(workspaces, {
+    fields: [workspaceSkills.workspaceId],
+    references: [workspaces.id]
+  }),
+  files: many(workspaceSkillFiles)
+}));
+
+export const workspaceSkillFilesRelations = relations(workspaceSkillFiles, ({ one }) => ({
+  skill: one(workspaceSkills, {
+    fields: [workspaceSkillFiles.skillId],
+    references: [workspaceSkills.id]
   })
 }));
