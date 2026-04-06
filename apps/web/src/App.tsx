@@ -6,14 +6,20 @@ import {
   ChatInputContainer,
   MessageList,
 } from "@/components/chat";
+import { WorkspaceSidebar } from "@/components/WorkspaceSidebar";
 import { RightSidebar } from "@/components/RightSidebar";
 import { AuthPage } from "@/pages/AuthPage";
+import { SkillsPage } from "@/pages/SkillsPage";
 import { ChevronLeft, PanelRightOpen } from "lucide-react";
 
+type ViewType = "chat" | "skills" | "integrations" | "settings";
+
 function App() {
-  const { isLoggedIn, isLoading: authLoading } = useAuth();
+  const { isLoggedIn, isLoading: authLoading, user, workspaces, currentWorkspace, switchWorkspace, createWorkspace } = useAuth();
   const { currentChat, messages, isStreaming } = useChat();
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
+  const [isChatSidebarOpen, setIsChatSidebarOpen] = useState(true);
+  const [activeView, setActiveView] = useState<ViewType>("chat");
 
   // Show auth page if not logged in
   if (!isLoggedIn && !authLoading) {
@@ -30,16 +36,52 @@ function App() {
     );
   }
 
-  const isHomeView = !currentChat && messages.length === 0;
+  const isHomeView = !currentChat && messages.length === 0 && activeView === "chat";
+
+  // Handle workspace switch
+  const handleSwitchWorkspace = (id: string) => {
+    switchWorkspace(id);
+    setActiveView("chat");
+  };
 
   return (
     <div className="relative h-screen flex overflow-hidden bg-zinc-50">
-      {/* Left Sidebar - Chat History */}
-      <ChatSidebarContainer />
+      {/* Left Sidebar - Workspace Navigation */}
+      <WorkspaceSidebar
+        currentWorkspace={currentWorkspace}
+        workspaces={workspaces}
+        onSwitchWorkspace={handleSwitchWorkspace}
+        activeView={activeView}
+        onViewChange={setActiveView}
+      />
+
+      {/* Chat Sidebar - Conditional */}
+      {activeView === "chat" && isChatSidebarOpen && <ChatSidebarContainer />}
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-        {isHomeView ? (
+        {activeView === "skills" ? (
+          /* Skills Page */
+          <SkillsPage
+            workspaceId={currentWorkspace?.id || ""}
+            workspaceName={currentWorkspace?.name || "Unknown"}
+            onBack={() => setActiveView("chat")}
+          />
+        ) : activeView === "integrations" ? (
+          /* Integrations Page (placeholder) */
+          <PlaceholderPage
+            title="Integrations"
+            description="Connect your favorite tools and services"
+            onBack={() => setActiveView("chat")}
+          />
+        ) : activeView === "settings" ? (
+          /* Settings Page (placeholder) */
+          <PlaceholderPage
+            title="Workspace Settings"
+            description="Manage your workspace preferences"
+            onBack={() => setActiveView("chat")}
+          />
+        ) : isHomeView ? (
           /* Home View */
           <div className="flex-1 flex flex-col items-center justify-center px-6 py-10 overflow-hidden bg-white">
             <div className="mb-8">
@@ -94,6 +136,29 @@ function App() {
             {isRightSidebarOpen && <RightSidebar />}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// Placeholder page for views not yet implemented
+function PlaceholderPage({
+  title,
+  description,
+  onBack,
+}: {
+  title: string;
+  description: string;
+  onBack: () => void;
+}) {
+  return (
+    <div className="flex-1 flex flex-col bg-white overflow-hidden">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-200">
+        <h1 className="text-lg font-medium text-zinc-900">{title}</h1>
+      </div>
+      <div className="flex-1 flex flex-col items-center justify-center">
+        <p className="text-sm text-zinc-500">{description}</p>
+        <p className="text-xs text-zinc-400 mt-2">Coming soon...</p>
       </div>
     </div>
   );
