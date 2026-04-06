@@ -573,9 +573,14 @@ router.post('/:chatId/stream', async (req: Request, res: Response) => {
     .from(schema.chats)
     .where(eq(schema.chats.id, chatId));
 
+  // Track if this is a new chat (for title emission)
+  let isNewChat = false;
+  let initialTitle = '';
+
   // If chat doesn't exist, create it (new chat from frontend)
   if (!chat) {
     console.log('[STREAM] Chat not found, creating new chat:', chatId);
+    isNewChat = true;
     
     // Verify workspace access before creating
     const [workspace] = await db.select()
@@ -606,21 +611,26 @@ router.post('/:chatId/stream', async (req: Request, res: Response) => {
       return res.status(403).json({ error: 'Access denied to workspace' });
     }
 
-    // Create the chat
+    // Create the chat with title from first message
     try {
+      // Generate title from first message (max 50 chars)
+      initialTitle = message.length > 50 
+        ? message.substring(0, 47) + '...' 
+        : message;
+      
       [chat] = await db.insert(schema.chats)
         .values({
           id: chatId,
           workspaceId,
           userId: req.userId!,
-          title: 'New Chat',
+          title: initialTitle,
           provider,
           model,
         })
         .returning()
         .then(rows => rows);
       
-      console.log('[STREAM] Created new chat:', chatId);
+      console.log('[STREAM] Created new chat:', chatId, 'with title:', initialTitle);
     } catch (insertErr) {
       console.error('[STREAM] Failed to create chat:', insertErr);
       return res.status(500).json({ error: 'Failed to create chat' });
@@ -719,6 +729,14 @@ router.post('/:chatId/stream', async (req: Request, res: Response) => {
     // 5. Run Pi Agent query with resolved credentials
     let assistantResponse = '';
     let sessionInitChunk: StreamChunk | null = null;
+
+    // Emit title_update for new chats immediately
+    if (isNewChat && initialTitle) {
+      res.write(`data: ${JSON.stringify({
+        type: 'title_update',
+        title: initialTitle
+      })}\n\n`);
+    }
 
     for await (const chunk of runPiQuery({
       provider,
