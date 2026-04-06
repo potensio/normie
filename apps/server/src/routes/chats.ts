@@ -788,21 +788,24 @@ router.post('/:chatId/stream', async (req: Request, res: Response) => {
           .where(eq(schema.chats.id, chatId));
       }
 
-      // Generate title after first exchange
-      const [messageCount] = await db
-        .select({ count: sql<number>`count(*)` })
+      // Generate title after first exchange (first 2 messages)
+      const [messageCountResult] = await db
+        .select({ count: sql<number>`count(*)::int` })
         .from(schema.messages)
         .where(eq(schema.messages.chatId, chatId));
       
-      if (messageCount.count === 2) {
+      const messageCount = messageCountResult?.count ?? 0;
+      console.log('[STREAM] Message count:', messageCount);
+      
+      if (messageCount === 2) {
         console.log('[STREAM] First exchange, generating title...');
         
-        generateConversationTitle({
-          userMessage: message,
-          assistantResponse,
-          provider: provider as Provider,
-          model,
-        }).then(async (title) => {
+        try {
+          const title = await generateConversationTitle({
+            userMessage: message,
+            assistantResponse,
+          });
+          
           await db.update(schema.chats)
             .set({ title, updatedAt: new Date() })
             .where(eq(schema.chats.id, chatId));
@@ -816,9 +819,9 @@ router.post('/:chatId/stream', async (req: Request, res: Response) => {
               title
             })}\n\n`);
           }
-        }).catch((err) => {
+        } catch (err) {
           console.error('[STREAM] Title generation failed:', err);
-        });
+        }
       }
     }
 

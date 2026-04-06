@@ -12,7 +12,7 @@ declare global {
       sessionId?: string;
       workspace?: SelectWorkspace;
       isWorkspaceOwner?: boolean;
-      workspaceRole?: string;
+      workspaceRole?: 'owner' | 'admin' | 'member' | 'viewer';
     }
   }
 }

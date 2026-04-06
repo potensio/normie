@@ -126,44 +126,21 @@ export async function resolveCredentials(
 }
 
 /**
- * AWS Bedrock credential data for runtime injection.
- * Used when the stored credentials contain access keys.
- */
-export interface BedrockCredentialData {
-  accessKeyId: string;
-  secretAccessKey: string;
-  region: string;
-  sessionToken?: string;
-}
-
-/**
- * Extended resolved credentials with Bedrock-specific data.
- */
-export interface BedrockResolvedCredentials extends ResolvedCredentials {
-  /** Bedrock-specific credential data for runtime injection */
-  bedrockCredentials?: BedrockCredentialData;
-}
-
-/**
  * Resolve AWS Bedrock credentials.
  * 
- * IMPORTANT: AWS Bedrock uses environment variables for credentials.
- * User-stored credentials in DB are NOT supported - only owner-managed env vars.
+ * Uses Mantle API (OpenAI-compatible) exclusively.
  * 
  * Required environment variables:
- * - AWS_ACCESS_KEY_ID
- * - AWS_SECRET_ACCESS_KEY
- * - AWS_REGION (defaults to us-east-1)
- * 
- * AWS SDK reads these automatically via its default credential chain.
+ * - BEDROCK_API_KEY
+ * - BEDROCK_BASE_URL
  */
 async function resolveBedrockCredentials(
   _storedKey: string | null // Ignored - Bedrock is owner-managed only
-): Promise<BedrockResolvedCredentials> {
+): Promise<ResolvedCredentials> {
   console.log('[BedrockCredentials] Resolving credentials...');
   
-  // Priority 1: Bedrock Mantle API Key (recommended)
-  // This is OpenAI-compatible API, not native Bedrock
+  // Bedrock Mantle API Key (OpenAI-compatible API)
+  // This is the only supported mode for amazon-bedrock
   if (process.env.BEDROCK_API_KEY && process.env.BEDROCK_BASE_URL) {
     console.log('[BedrockCredentials] Using Mantle API (OpenAI-compatible)');
     console.log(`[BedrockCredentials]   API Key: ***${process.env.BEDROCK_API_KEY.slice(-8)}`);
@@ -172,27 +149,6 @@ async function resolveBedrockCredentials(
     return {
       configured: true,
       source: 'env',
-      streamOptions: {
-        region: 'mantle', // Indicates Mantle API
-        useMantle: true,
-      },
-    };
-  }
-  
-  // Priority 2: Native Bedrock via AWS credentials
-  if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
-    const region = process.env.AWS_REGION || 'us-east-1';
-    console.log(`[BedrockCredentials] Using native Bedrock (Converse API)`);
-    console.log(`[BedrockCredentials]   Access Key: ***${process.env.AWS_ACCESS_KEY_ID.slice(-4)}`);
-    console.log(`[BedrockCredentials]   Region: ${region}`);
-    
-    return {
-      configured: true,
-      source: 'env',
-      streamOptions: {
-        region,
-        useMantle: false,
-      },
     };
   }
   
@@ -201,7 +157,7 @@ async function resolveBedrockCredentials(
   return {
     configured: false,
     source: 'none',
-    error: 'AWS Bedrock credentials not configured. Set BEDROCK_API_KEY for Mantle or AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY for native.',
+    error: 'AWS Bedrock credentials not configured. Set BEDROCK_API_KEY and BEDROCK_BASE_URL.',
   };
 }
 

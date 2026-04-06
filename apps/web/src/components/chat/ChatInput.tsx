@@ -8,7 +8,6 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import {
   Send,
   Paperclip,
-  Plus,
   Square,
   ChevronDown,
   Check as CheckIcon,
@@ -135,12 +134,6 @@ export function ChatInput({
               className="w-8 h-8 rounded-full bg-white border border-zinc-200 flex items-center justify-center hover:bg-zinc-50 transition-colors text-zinc-500"
             >
               <Paperclip className="w-4 h-4" strokeWidth={1.5} />
-            </button>
-            <button
-              type="button"
-              className="w-8 h-8 rounded-full bg-white border border-zinc-200 flex items-center justify-center hover:bg-zinc-50 transition-colors text-zinc-500"
-            >
-              <Plus className="w-4 h-4" strokeWidth={1.5} />
             </button>
             <div className="h-5 w-px bg-zinc-200 mx-1" />
 

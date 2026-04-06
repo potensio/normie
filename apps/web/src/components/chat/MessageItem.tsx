@@ -49,13 +49,10 @@ export const MessageItem = memo(function MessageItem({
         transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
         className="flex flex-col gap-0.5 items-end"
       >
-        {/* Glass container wrapper - more compact */}
-        <div className="inline-block p-1 pb-0.5 rounded-2xl bg-white/40 border border-white/60 shadow-glass">
-          <div className="bg-gradient-to-br from-purple-500 to-purple-600 px-3.5 py-2 rounded-2xl max-w-2xl border border-purple-400/50 shadow-purple">
-            <p className="text-sm font-normal text-white leading-relaxed">
-              {message.content}
-            </p>
-          </div>
+        <div className="bg-gradient-to-br from-purple-500 to-purple-600 px-3.5 py-2 rounded-2xl max-w-2xl border border-purple-400/50 shadow-purple">
+          <p className="text-sm font-normal text-white leading-relaxed">
+            {message.content}
+          </p>
         </div>
         <span className="text-xs font-light text-text-tertiary mr-1.5">
           {formatRelativeTime(timestamp)}

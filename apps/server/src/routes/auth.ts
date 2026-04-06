@@ -20,27 +20,34 @@ import {
 } from '../auth/session.js';
 import { getDb } from '../db/index.js';
 import * as schema from '../db/schema.js';
+import {
+  ValidationError,
+  ConflictError,
+  UnauthorizedError,
+  NotFoundError,
+  asyncHandler
+} from '../middleware/index.js';
 
 const router = Router();
 
 // ============================================
 // REGISTRATION
 // ============================================
-router.post('/register', async (req: Request, res: Response) => {
+router.post('/register', asyncHandler(async (req: Request, res: Response) => {
+  const { email, password, displayName } = req.body;
+  
+  if (!email || !password) {
+    throw new ValidationError('Email and password required');
+  }
+  
+  if (password.length < 8) {
+    throw new ValidationError('Password must be at least 8 characters');
+  }
+
+  const userAgent = req.headers['user-agent'];
+  const ipAddress = req.ip || req.socket.remoteAddress;
+
   try {
-    const { email, password, displayName } = req.body;
-    
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password required' });
-    }
-    
-    if (password.length < 8) {
-      return res.status(400).json({ error: 'Password must be at least 8 characters' });
-    }
-
-    const userAgent = req.headers['user-agent'];
-    const ipAddress = req.ip || req.socket.remoteAddress;
-
     const result = await register(email, password, displayName, userAgent, ipAddress);
     
     // Set session cookie (http-only, long-lived)
@@ -54,29 +61,27 @@ router.post('/register', async (req: Request, res: Response) => {
       expiresIn: result.expiresIn 
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    if (message === 'Email already registered') {
-      return res.status(409).json({ error: message });
+    if ((err as Error).message === 'Email already registered') {
+      throw new ConflictError('Email already registered');
     }
-    console.error('[AUTH] Registration error:', err);
-    res.status(500).json({ error: 'Registration failed' });
+    throw err;
   }
-});
+}));
 
 // ============================================
 // LOGIN
 // ============================================
-router.post('/login', async (req: Request, res: Response) => {
+router.post('/login', asyncHandler(async (req: Request, res: Response) => {
+  const { email, password } = req.body;
+  
+  if (!email || !password) {
+    throw new ValidationError('Email and password required');
+  }
+
+  const userAgent = req.headers['user-agent'];
+  const ipAddress = req.ip || req.socket.remoteAddress;
+
   try {
-    const { email, password } = req.body;
-    
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password required' });
-    }
-
-    const userAgent = req.headers['user-agent'];
-    const ipAddress = req.ip || req.socket.remoteAddress;
-
     const result = await login(email, password, userAgent, ipAddress);
     
     // Set cookies
@@ -88,139 +93,115 @@ router.post('/login', async (req: Request, res: Response) => {
       expiresIn: result.expiresIn 
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    if (message === 'Invalid credentials') {
-      return res.status(401).json({ error: message });
+    if ((err as Error).message === 'Invalid credentials') {
+      throw new UnauthorizedError('Invalid credentials');
     }
-    console.error('[AUTH] Login error:', err);
-    res.status(500).json({ error: 'Login failed' });
+    throw err;
   }
-});
+}));
 
 // ============================================
 // REFRESH TOKEN
 // ============================================
-router.post('/refresh', async (req: Request, res: Response) => {
-  try {
-    const sessionId = req.cookies?.sessionId as string | undefined;
-    
-    if (!sessionId) {
-      return res.status(401).json({ error: 'No session', code: 'NO_SESSION' });
-    }
-
-    const ipAddress = req.ip || req.socket.remoteAddress;
-    const result = await refreshAuth(sessionId, ipAddress);
-    
-    if (!result) {
-      // Session invalid or expired
-      res.clearCookie('sessionId');
-      res.clearCookie('accessToken');
-      return res.status(401).json({ error: 'Session expired', code: 'SESSION_EXPIRED' });
-    }
-    
-    // Set new access token
-    res.cookie('accessToken', result.accessToken, getAccessTokenCookieOptions());
-    
-    // Return user info
-    const session = await getSession(sessionId);
-    if (session) {
-      const db = getDb();
-      const [user] = await db.select({
-        id: schema.users.id,
-        email: schema.users.email,
-        displayName: schema.users.displayName,
-        createdAt: schema.users.createdAt
-      }).from(schema.users).where(eq(schema.users.id, session.userId));
-      
-      return res.json({ 
-        user,
-        expiresIn: result.expiresIn 
-      });
-    }
-    
-    res.json({ expiresIn: result.expiresIn });
-  } catch (err) {
-    console.error('[AUTH] Refresh failed:', err);
-    res.status(401).json({ error: 'Refresh failed' });
+router.post('/refresh', asyncHandler(async (req: Request, res: Response) => {
+  const sessionId = req.cookies?.sessionId as string | undefined;
+  
+  if (!sessionId) {
+    throw new UnauthorizedError('No session');
   }
-});
 
-// ============================================
-// LOGOUT
-// ============================================
-router.post('/logout', async (req: Request, res: Response) => {
-  try {
-    const sessionId = req.cookies?.sessionId as string | undefined;
-    
-    if (sessionId) {
-      await logout(sessionId);
-    }
-    
-    // Clear cookies
-    res.clearCookie('sessionId', getSessionCookieOptions());
-    res.clearCookie('accessToken', getAccessTokenCookieOptions());
-    
-    res.json({ success: true });
-  } catch (err) {
-    console.error('[AUTH] Logout error:', err);
-    // Still clear cookies
+  const ipAddress = req.ip || req.socket.remoteAddress;
+  const result = await refreshAuth(sessionId, ipAddress);
+  
+  if (!result) {
+    // Session invalid or expired
     res.clearCookie('sessionId');
     res.clearCookie('accessToken');
-    res.json({ success: true });
+    throw new UnauthorizedError('Session expired');
   }
-});
-
-router.post('/logout-all', requireAuth, async (req: Request, res: Response) => {
-  try {
-    await logoutAll(req.userId!);
-    
-    res.clearCookie('sessionId');
-    res.clearCookie('accessToken');
-    
-    res.json({ success: true });
-  } catch (err) {
-    console.error('[AUTH] Logout all error:', err);
-    res.status(500).json({ error: 'Logout failed' });
-  }
-});
-
-// ============================================
-// GET CURRENT USER
-// ============================================
-router.get('/me', requireAuth, async (req: Request, res: Response) => {
-  try {
+  
+  // Set new access token
+  res.cookie('accessToken', result.accessToken, getAccessTokenCookieOptions());
+  
+  // Return user info
+  const session = await getSession(sessionId);
+  if (session) {
     const db = getDb();
     const [user] = await db.select({
       id: schema.users.id,
       email: schema.users.email,
       displayName: schema.users.displayName,
-      createdAt: schema.users.createdAt,
-      lastLoginAt: schema.users.lastLoginAt
-    })
-      .from(schema.users)
-      .where(eq(schema.users.id, req.userId!));
-
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    // Get user's workspaces
-    const workspaces = await db.select({
-      id: schema.workspaces.id,
-      name: schema.workspaces.name,
-      description: schema.workspaces.description,
-      isDefault: schema.workspaces.isDefault,
-      createdAt: schema.workspaces.createdAt
-    })
-      .from(schema.workspaces)
-      .where(eq(schema.workspaces.ownerId, req.userId!));
-
-    res.json({ ...user, workspaces });
-  } catch (err) {
-    console.error('[AUTH] Get user error:', err);
-    res.status(500).json({ error: 'Failed to get user' });
+      createdAt: schema.users.createdAt
+    }).from(schema.users).where(eq(schema.users.id, session.userId));
+    
+    res.json({ 
+      user,
+      expiresIn: result.expiresIn 
+    });
+    return;
   }
-});
+  
+  res.json({ expiresIn: result.expiresIn });
+}));
+
+// ============================================
+// LOGOUT
+// ============================================
+router.post('/logout', asyncHandler(async (req: Request, res: Response) => {
+  const sessionId = req.cookies?.sessionId as string | undefined;
+  
+  if (sessionId) {
+    await logout(sessionId);
+  }
+  
+  // Clear cookies
+  res.clearCookie('sessionId', getSessionCookieOptions());
+  res.clearCookie('accessToken', getAccessTokenCookieOptions());
+  
+  res.json({ success: true });
+}));
+
+router.post('/logout-all', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+  await logoutAll(req.userId!);
+  
+  res.clearCookie('sessionId');
+  res.clearCookie('accessToken');
+  
+  res.json({ success: true });
+}));
+
+// ============================================
+// GET CURRENT USER
+// ============================================
+router.get('/me', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+  const db = getDb();
+  const [user] = await db.select({
+    id: schema.users.id,
+    email: schema.users.email,
+    displayName: schema.users.displayName,
+    createdAt: schema.users.createdAt,
+    lastLoginAt: schema.users.lastLoginAt
+  })
+    .from(schema.users)
+    .where(eq(schema.users.id, req.userId!));
+
+  if (!user) {
+    throw new NotFoundError('User');
+  }
+
+  // Get user's workspaces
+  const workspaces = await db.select({
+    id: schema.workspaces.id,
+    name: schema.workspaces.name,
+    description: schema.workspaces.description,
+    isDefault: schema.workspaces.isDefault,
+    createdAt: schema.workspaces.createdAt
+  })
+    .from(schema.workspaces)
+    .where(eq(schema.workspaces.ownerId, req.userId!));
+
+  res.json({ ...user, workspaces });
+}));
 
 // ============================================
 // CHECK AUTH STATUS
@@ -253,63 +234,58 @@ router.get('/status', async (req: Request, res: Response) => {
 // ============================================
 // INVITE ACCEPTANCE
 // ============================================
-router.post('/accept-invite/:token', async (req: Request, res: Response) => {
-  try {
-    const token = req.params.token;
-    if (Array.isArray(token)) {
-      return res.status(400).json({ error: 'Invalid token' });
-    }
-    const db = getDb();
-
-    const [invite] = await db.select()
-      .from(schema.workspaceInvites)
-      .where(eq(schema.workspaceInvites.token, token));
-
-    if (!invite) {
-      return res.status(404).json({ error: 'Invalid invite token' });
-    }
-
-    if (new Date() > invite.expiresAt) {
-      return res.status(400).json({ error: 'Invite expired' });
-    }
-
-    let user: SafeUser | undefined = await getUserByEmail(invite.inviteeEmail);
-    
-    if (!user) {
-      const { password, displayName } = req.body;
-      if (!password) {
-        return res.status(400).json({ error: 'Password required for new account' });
-      }
-      user = await createUser(invite.inviteeEmail, password, displayName || null);
-    }
-
-    await db.insert(schema.workspaceMembers)
-      .values({
-        workspaceId: invite.workspaceId,
-        userId: user.id,
-        role: invite.role
-      });
-
-    await db.delete(schema.workspaceInvites)
-      .where(eq(schema.workspaceInvites.id, invite.id));
-
-    // Create session
-    const userAgent = req.headers['user-agent'];
-    const ipAddress = req.ip || req.socket.remoteAddress;
-    const { createSession } = await import('../auth/session.js');
-    const { sessionId } = await createSession(user.id, userAgent, ipAddress);
-    const accessToken = generateAccessToken(user.id);
-    
-    res.cookie('sessionId', sessionId, getSessionCookieOptions());
-    res.cookie('accessToken', accessToken, getAccessTokenCookieOptions());
-    
-    res.json({
-      user: { id: user.id, email: user.email, displayName: user.displayName }
-    });
-  } catch (err) {
-    console.error('[AUTH] Accept invite error:', err);
-    res.status(500).json({ error: 'Failed to accept invite' });
+router.post('/accept-invite/:token', asyncHandler(async (req: Request, res: Response) => {
+  const token = req.params.token;
+  if (Array.isArray(token)) {
+    throw new ValidationError('Invalid token');
   }
-});
+  const db = getDb();
+
+  const [invite] = await db.select()
+    .from(schema.workspaceInvites)
+    .where(eq(schema.workspaceInvites.token, token));
+
+  if (!invite) {
+    throw new NotFoundError('Invite token');
+  }
+
+  if (new Date() > invite.expiresAt) {
+    throw new ValidationError('Invite expired');
+  }
+
+  let user: SafeUser | undefined = await getUserByEmail(invite.inviteeEmail);
+  
+  if (!user) {
+    const { password, displayName } = req.body;
+    if (!password) {
+      throw new ValidationError('Password required for new account');
+    }
+    user = await createUser(invite.inviteeEmail, password, displayName || null);
+  }
+
+  await db.insert(schema.workspaceMembers)
+    .values({
+      workspaceId: invite.workspaceId,
+      userId: user.id,
+      role: invite.role
+    });
+
+  await db.delete(schema.workspaceInvites)
+    .where(eq(schema.workspaceInvites.id, invite.id));
+
+  // Create session
+  const userAgent = req.headers['user-agent'];
+  const ipAddress = req.ip || req.socket.remoteAddress;
+  const { createSession } = await import('../auth/session.js');
+  const { sessionId } = await createSession(user.id, userAgent, ipAddress);
+  const accessToken = generateAccessToken(user.id);
+  
+  res.cookie('sessionId', sessionId, getSessionCookieOptions());
+  res.cookie('accessToken', accessToken, getAccessTokenCookieOptions());
+  
+  res.json({
+    user: { id: user.id, email: user.email, displayName: user.displayName }
+  });
+}));
 
 export default router;

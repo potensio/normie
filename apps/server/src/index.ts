@@ -28,6 +28,7 @@ import { initializePiAgent, getEnabledProviders } from './pi/index.js';
 import { loadPiConfig } from './pi/config.js';
 import { getProviders, getModels } from '@mariozechner/pi-ai';
 import type { PiProviderInfo, PiModel } from '@normie/types';
+import { errorHandler, notFoundHandler } from './middleware/index.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -165,6 +166,16 @@ app.get('/api/providers', (_req, res) => {
     },
   });
 });
+
+// ============================================
+// ERROR HANDLING
+// ============================================
+
+// 404 handler for unknown routes (must be after all routes)
+app.use(notFoundHandler);
+
+// Global error handler (must be last)
+app.use(errorHandler);
 
 // ============================================
 // DATABASE INITIALIZATION
