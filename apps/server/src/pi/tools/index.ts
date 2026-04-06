@@ -1,4 +1,4 @@
-import { codingTools, readOnlyTools } from '@mariozechner/pi-coding-agent';
+import { codingTools, readOnlyTools, grepTool, findTool, lsTool } from '@mariozechner/pi-coding-agent';
 import type { AgentTool } from '@mariozechner/pi-agent-core';
 import type { TSchema } from '@sinclair/typebox';
 import {
@@ -11,7 +11,7 @@ import { webSearchTool, webFetchTool } from './web-tools.js';
 // Re-export for external use
 export { buildComposioTools, getComposioClient, type ComposioToolConfig } from './composio-tools.js';
 export { webSearchTool, webFetchTool } from './web-tools.js';
-export { codingTools, readOnlyTools } from '@mariozechner/pi-coding-agent';
+export { codingTools, readOnlyTools, grepTool, findTool, lsTool } from '@mariozechner/pi-coding-agent';
 
 /**
  * Tool builder configuration options
@@ -87,9 +87,11 @@ export async function buildWorkspaceTools(
       tools.push(...readOnlyTools);
       console.log('[ToolSystem] Added readOnlyTools:', readOnlyTools.map(t => t.name).join(', '));
     } else {
-      // Full mode: include all coding tools
+      // Full mode: include all coding tools + additional read-only tools
       tools.push(...codingTools);
-      console.log('[ToolSystem] Added codingTools:', codingTools.map(t => t.name).join(', '));
+      // Add grep, find, ls which are useful for code exploration
+      tools.push(grepTool, findTool, lsTool);
+      console.log('[ToolSystem] Added codingTools + grep, find, ls:', [...codingTools.map(t => t.name), 'grep', 'find', 'ls'].join(', '));
     }
   }
 
