@@ -8,7 +8,7 @@
 | Tools (grep, find, ls) | ✅ Native | ✅ Implemented | ✅ Done |
 | Web tools (search, fetch) | ✅ Native | ✅ Implemented | None |
 | Composio tools | ✅ Dynamic | ✅ Dynamic | None |
-| Skills | ✅ Auto-loaded | ❌ Missing | Need to implement |
+| Skills | ✅ Auto-loaded | ✅ Implemented | ✅ Done |
 | Extensions | ✅ Auto-loaded | ❌ Missing | Need to implement |
 | Settings/themes | ✅ From ~/.pi | ❌ Missing | Need to implement |
 | Session branching | ✅ Native | ⚠️ Partial | Via DB, not JSONL |
