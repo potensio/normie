@@ -106,7 +106,12 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     toolCalls: displayToolCalls,
     isStreaming,
     sendStreamMessage,
-    setCurrentChat: () => {}, // No longer needed - TanStack Query handles this
+    setCurrentChat: (chat) => {
+      // Update currentChatId when a new chat is created
+      if (chat && chat.id !== currentChatId) {
+        navigateToChat(chat.id);
+      }
+    },
   });
 
   // Wrapped actions
