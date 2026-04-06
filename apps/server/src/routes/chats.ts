@@ -6,12 +6,14 @@
  */
 
 import { Router, Request, Response } from 'express';
+import { eq, desc } from 'drizzle-orm';
 import { requireAuth, requireWorkspaceAccess } from '../auth/index.js';
 import { getDb } from '../db/index.js';
 import * as schema from '../db/schema.js';
 import {
   ValidationError,
   ForbiddenError,
+  NotFoundError,
   asyncHandler,
   requireChat,
   requireChatWrite
@@ -28,6 +30,7 @@ import {
   getChatTree,
   verifyChatAccess,
   verifyChatWriteAccess,
+  updateMessageMetadata,
   type CreateChatInput,
   type UpdateChatInput,
   type SwitchModelInput,
@@ -223,6 +226,31 @@ router.post('/:chatId/stream', asyncHandler(async (req: Request, res: Response) 
     workspaceId,
     userId: req.userId!
   }, req, res);
+}));
+
+// ============================================
+// UPDATE MESSAGE METADATA (for blocks persistence)
+// ============================================
+router.patch('/messages/:messageId/metadata', asyncHandler(async (req: Request, res: Response) => {
+  const messageId = getStringParam(req.params.messageId);
+  const { blocks } = req.body;
+
+  // Verify message exists and user has access
+  const [message] = await getDb().select()
+    .from(schema.messages)
+    .where(eq(schema.messages.id, messageId));
+
+  if (!message) {
+    throw new NotFoundError('Message');
+  }
+
+  // Verify chat access
+  await verifyChatAccess(getDb(), message.chatId, req.userId!);
+
+  // Update metadata with blocks
+  const updated = await updateMessageMetadata(getDb(), messageId, { blocks });
+
+  res.json(updated);
 }));
 
 export default router;

@@ -1,36 +1,38 @@
 # Implementation Plan
 
-- [ ] 1. Update types for blocks-based message structure
-  - [ ] 1.1 Add MessageBlock, TextBlock, and ToolBlock types
+## Status: COMPLETE ✓
+
+- [x] 1. Update types for blocks-based message structure
+  - [x] 1.1 Add MessageBlock, TextBlock, and ToolBlock types
     - Add `MessageBlock` union type to `packages/types/src/index.ts`
     - Add `TextBlock` interface with `type: "text"` and `content: string`
     - Add `ToolBlock` interface with `type: "tool"` and `toolCall: InlineToolCall`
     - _Requirements: 1.1_
-  - [ ] 1.2 Extend InlineToolCall with timing and error fields
+  - [x] 1.2 Extend InlineToolCall with timing and error fields
     - Add `startTime: number` field to `InlineToolCall` (Unix timestamp in ms)
     - Add `duration?: number` field (seconds, set on completion)
     - Add `errorMessage?: string` field for user-friendly error display
     - _Requirements: 2.6, 2.7_
-  - [ ] 1.3 Update Message interface to use blocks
+  - [x] 1.3 Update Message interface to use blocks
     - Add `blocks?: MessageBlock[]` to `Message` interface
     - Mark `content` as optional (deprecated for migration)
     - Remove `inlineToolCalls` field from `Message` interface
     - _Requirements: 1.1_
 
-- [ ] 2. Create utility functions for tool display
-  - [ ] 2.1 Create tool labels module
+- [x] 2. Create utility functions for tool display
+  - [x] 2.1 Create tool labels module
     - Create `apps/web/src/lib/tool-labels.ts`
     - Implement `getToolLabel(toolName: string): { verb: string; pastTense: string }`
     - Map known tools: read → Reading/Read, bash → Running command/Ran command, grep/search → Searching/Searched, write/edit → Writing/Wrote
     - Implement fallback: convert camelCase/PascalCase to spaces and capitalize
     - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5_
-  - [ ] 2.2 Create tool target extractor
+  - [x] 2.2 Create tool target extractor
     - Implement `getToolTarget(toolName: string, input: Record<string, unknown>): string`
     - Extract file path for file tools (use `filename` or `path` from input, show only basename)
     - Extract command for bash (show first 40 chars of command)
     - Extract query for search tools (show `query` or `pattern` from input)
     - _Requirements: 2.4_
-  - [ ] 2.3 Create target truncation utility
+  - [x] 2.3 Create target truncation utility
     - Implement `truncateTarget(target: string, maxLength = 40): string`
     - Return target unchanged if length ≤ maxLength
     - Return `${target.slice(0, maxLength)}...` if length > maxLength
@@ -38,7 +40,7 @@
   - [ ]* 2.4 Write property test for target truncation bound
     - **Property 3: Target Truncation Bound**
     - **Validates: Requirements 2.5_
-  - [ ] 2.5 Create error classification module
+  - [x] 2.5 Create error classification module
     - Create `apps/web/src/lib/error-messages.ts`
     - Implement `classifyToolError(error: unknown): string`
     - Map network errors → "Network error, please check your connection"
@@ -50,22 +52,22 @@
     - **Property 5: Error Message Truncation**
     - **Validates: Requirements 5.5_
 
-- [ ] 3. Refactor useChatStream to build blocks
-  - [ ] 3.1 Update useChatStream to use blocks instead of content
+- [x] 3. Refactor useChatStream to build blocks
+  - [x] 3.1 Update useChatStream to use blocks instead of content
     - Modify `apps/web/src/hooks/useChatStream.ts`
     - Replace `fullContent` string accumulator with `blocks: MessageBlock[]` array
     - Remove `inlineToolCalls` handling from message state
     - _Requirements: 1.1, 1.2_
-  - [ ] 3.2 Implement text block appending
+  - [x] 3.2 Implement text block appending
     - On `type: 'text'` chunk: append or merge with last TextBlock if adjacent
     - Handle `isReasoning` flag separately (keep in `reasoning` field, not blocks)
     - _Requirements: 1.2_
-  - [ ] 3.3 Implement tool block creation on tool_use
+  - [x] 3.3 Implement tool block creation on tool_use
     - On `type: 'tool_use'` chunk: append new ToolBlock with `status: 'running'`
     - Set `startTime` to `Date.now()`
     - Store mapping of `tool_use_id` → block index for later updates
     - _Requirements: 1.3_
-  - [ ] 3.4 Implement tool block update on tool_result
+  - [x] 3.4 Implement tool block update on tool_result
     - On `type: 'tool_result'` chunk: find ToolBlock by `tool_use_id`
     - Set `status` to `'success'` or `'error'` based on result
     - Calculate `duration` as `(Date.now() - startTime) / 1000`, round to 1 decimal
@@ -78,11 +80,11 @@
     - **Property 2: Tool Duration Accuracy**
     - **Validates: Requirements 2.6, 2.7_
 
-- [ ] 4. Checkpoint - Ensure block construction works correctly
+- [x] 4. Checkpoint - Ensure block construction works correctly
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 5. Create UI components for compact tool display
-  - [ ] 5.1 Create CompactToolCall component
+- [x] 5. Create UI components for compact tool display
+  - [x] 5.1 Create CompactToolCall component
     - Create `apps/web/src/components/CompactToolCall.tsx`
     - Accept `toolCall: InlineToolCall` and `isStreaming: boolean` props
     - Render 1 line for success: `✓ {pastTense} {target} {duration}s`
@@ -90,12 +92,12 @@
     - Render 2 lines for error: `✗ {pastTense} {target}` + error message
     - Use `framer-motion` for enter animation
     - _Requirements: 2.1, 2.2, 2.3_
-  - [ ] 5.2 Add click-to-expand functionality to CompactToolCall
+  - [x] 5.2 Add click-to-expand functionality to CompactToolCall
     - Add `isExpanded` state, toggled on click/tap
     - When expanded, show `ToolResultViewer` below the compact line
     - When clicked again, collapse the result
     - _Requirements: 3.1, 3.6_
-  - [ ] 5.3 Create ToolResultViewer component
+  - [x] 5.3 Create ToolResultViewer component
     - Create `apps/web/src/components/ToolResultViewer.tsx`
     - Pretty-print JSON results with `react-syntax-highlighter` (already installed)
     - Set `maxHeight: 200px` with `overflow-y: auto`
@@ -104,30 +106,30 @@
   - [ ]* 5.4 Write property test for result height bound
     - **Property 4: Result Height Bound**
     - **Validates: Requirements 3.5_
-  - [ ] 5.5 Create MessageBlocks renderer component
+  - [x] 5.5 Create MessageBlocks renderer component
     - Create `apps/web/src/components/MessageBlocks.tsx`
     - Accept `blocks: MessageBlock[]` and `isStreaming: boolean` props
     - Map over blocks: render `AnimatedStream` for TextBlock, `CompactToolCall` for ToolBlock
     - Pass `isStreaming` to last block if status is running
     - _Requirements: 1.4_
 
-- [ ] 6. Update MessageItem to use blocks
-  - [ ] 6.1 Refactor MessageItem to render blocks
+- [x] 6. Update MessageItem to use blocks
+  - [x] 6.1 Refactor MessageItem to render blocks
     - Modify `apps/web/src/components/chat/MessageItem.tsx`
     - Replace inline tool calls rendering with `MessageBlocks` component
     - Remove `inlineToolCalls` mapping logic
     - Keep `reasoning` handling unchanged
     - _Requirements: 1.4_
 
-- [ ] 7. Cleanup deprecated code
-  - [ ] 7.1 Remove old InlineToolCall component
+- [x] 7. Cleanup deprecated code
+  - [x] 7.1 Remove old InlineToolCall component
     - Delete `apps/web/src/components/InlineToolCall.tsx`
     - _Requirements: 1.1_
-  - [ ] 7.2 Simplify tool-icons module
+  - [x] 7.2 Simplify tool-icons module
     - Modify `apps/web/src/lib/tool-icons.ts`
     - Remove category color logic (no longer needed for compact display)
     - Keep only icon mapping for future use if needed
     - _Requirements: 2.1_
 
-- [ ] 8. Final Checkpoint - Ensure all tests pass
+- [x] 8. Final Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.

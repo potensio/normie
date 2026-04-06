@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useChat } from "@/contexts/ChatContext";
 import {
@@ -21,6 +21,25 @@ function App() {
   const [isChatSidebarOpen, setIsChatSidebarOpen] = useState(true);
   const [activeView, setActiveView] = useState<ViewType>("chat");
 
+  // Random tagline for home view - must be before early returns (React hooks rule)
+  const tagline = useMemo(() => {
+    const taglines = [
+      "What's next wizard?",
+      "Press enter and let's conquer the world.",
+      "Ring ring! Your keyboard called.",
+      "Your projects called, they miss you.",
+      "Tell me something, so you can scrolling.",
+      "Ready to feel like a genius?",
+      "Your to-do list is shaking right now.",
+      "Let's turn that brain energy into brilliance.",
+      "Time to earn that coffee.",
+      "Ready when you are, legend.",
+    ];
+    return taglines[Math.floor(Math.random() * taglines.length)];
+  }, []);
+
+  const isHomeView = !currentChat && messages.length === 0 && activeView === "chat";
+
   // Show auth page if not logged in
   if (!isLoggedIn && !authLoading) {
     return <AuthPage />;
@@ -35,8 +54,6 @@ function App() {
       </div>
     );
   }
-
-  const isHomeView = !currentChat && messages.length === 0 && activeView === "chat";
 
   // Handle workspace switch
   const handleSwitchWorkspace = (id: string) => {
@@ -80,7 +97,7 @@ function App() {
             <div className="mb-8">
               <div className="flex flex-col items-center gap-2">
                 <h1 className="font-accent text-4xl font-normal text-text-primary tracking-tighter">
-                  Mari berbincang dan berkreasi bersama 🤙
+                  {tagline}
                 </h1>
                 <p className="text-sm text-text-tertiary mt-1 tracking-wide font-light">
                   Automate across 1,000+ apps

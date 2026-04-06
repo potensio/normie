@@ -68,7 +68,7 @@ export function CompactToolCall({
       initial={{ opacity: 0, y: 4 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
-      className="rounded-lg bg-zinc-50 border border-zinc-200 overflow-hidden"
+      className="rounded-lg overflow-hidden"
     >
       {/* Main row - clickable if has result */}
       <button

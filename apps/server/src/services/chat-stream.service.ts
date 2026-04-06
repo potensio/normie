@@ -131,9 +131,9 @@ export async function getOrCreateStreamChat(
       title: initialTitle,
       provider,
       model
-    });
+    }, chatId);
 
-    console.log('[STREAM] Created new chat:', chatId, 'with title:', initialTitle);
+    console.log('[STREAM] Created new chat:', chat.id, 'with title:', initialTitle);
   }
 
   return {

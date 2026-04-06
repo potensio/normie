@@ -299,7 +299,7 @@ export function useChatSender(params: UseChatSenderParams): UseChatSenderReturn 
       if (result) {
         // Filter out error messages for final state
         const finalMessages: Message[] = messages.filter((m) =>
-          !m.content.startsWith('[Error:')
+          m.content ? !m.content.startsWith('[Error:') : true
         );
 
         const finalTitle = generatedTitleRef.current || result.chatTitle;

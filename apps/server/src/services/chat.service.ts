@@ -107,10 +107,12 @@ export async function createChat(
   db: DbClient,
   workspaceId: string,
   userId: string,
-  input: CreateChatInput = {}
+  input: CreateChatInput = {},
+  id?: string
 ): Promise<typeof schema.chats.$inferSelect> {
   const [chat] = await db.insert(schema.chats)
     .values({
+      id,
       workspaceId,
       userId,
       title: input.title || 'New Chat',
@@ -285,6 +287,37 @@ export async function addAssistantMessage(
   content: string
 ): Promise<typeof schema.messages.$inferSelect> {
   return addMessage(db, chatId, { role: 'assistant', content });
+}
+
+/**
+ * Update message metadata (for storing blocks)
+ */
+export async function updateMessageMetadata(
+  db: DbClient,
+  messageId: string,
+  metadata: Record<string, unknown>
+): Promise<typeof schema.messages.$inferSelect> {
+  // Get current message to merge metadata
+  const [existing] = await db.select()
+    .from(schema.messages)
+    .where(eq(schema.messages.id, messageId));
+
+  if (!existing) {
+    throw new NotFoundError('Message');
+  }
+
+  // Merge with existing metadata
+  const mergedMetadata = {
+    ...(existing.metadata || {}),
+    ...metadata
+  };
+
+  const [updated] = await db.update(schema.messages)
+    .set({ metadata: mergedMetadata })
+    .where(eq(schema.messages.id, messageId))
+    .returning();
+
+  return updated;
 }
 
 /**

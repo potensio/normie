@@ -90,10 +90,13 @@ interface ApiChatResponse {
 interface ApiMessageResponse {
   id?: string | number;
   role: string;
-  content: string;
+  content?: string;
   reasoning?: string;
   toolCalls?: ToolCall[];
-  blocks?: Message['blocks'];
+  metadata?: {
+    blocks?: Message['blocks'];
+    [key: string]: unknown;
+  };
 }
 
 /**
@@ -106,7 +109,7 @@ function transformApiMessage(msg: ApiMessageResponse): Message {
     content: msg.content || '',
     reasoning: msg.reasoning,
     toolCalls: msg.toolCalls,
-    blocks: msg.blocks,
+    blocks: msg.metadata?.blocks as Message['blocks'],
   };
 }
 

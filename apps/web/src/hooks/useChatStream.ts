@@ -400,6 +400,15 @@ export function useChatStream(): UseChatStreamReturn {
           })
         );
 
+        // Persist blocks to backend
+        if (blocks.length > 0) {
+          try {
+            await chatApi.updateMessageBlocks(assistantMessageId, blocks);
+          } catch (err) {
+            console.warn('[useChatStream] Failed to persist blocks:', err);
+          }
+        }
+
         return { chatId, chatTitle };
       } catch (error) {
         console.error('[useChatStream] Error:', error);

@@ -79,4 +79,22 @@ export const chatApi = {
     window.electronAPI?.abortCurrentRequest();
     await window.electronAPI?.stopQuery(chatId, provider);
   },
+
+  /**
+   * Update message metadata (for blocks persistence)
+   */
+  updateMessageBlocks: async (messageId: string, blocks: unknown[]): Promise<void> => {
+    if (!window.authAPI) throw new Error('Auth API not available');
+    // Call the backend endpoint
+    const response = await fetch(`/api/chats/messages/${messageId}/metadata`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ blocks }),
+      credentials: 'include',
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to update message blocks');
+    }
+  },
 };

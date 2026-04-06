@@ -66,10 +66,8 @@ export function ChatSidebar({
 
   const handleDeleteChat = (e: React.MouseEvent, chatId: string) => {
     e.stopPropagation();
-    if (window.confirm("Are you sure you want to delete this chat?")) {
-      onDeleteChat(chatId);
-      setOpenDropdown(null);
-    }
+    onDeleteChat(chatId);
+    setOpenDropdown(null);
   };
 
   const toggleDropdown = (e: React.MouseEvent, chatId: string) => {
