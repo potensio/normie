@@ -1,24 +1,25 @@
 /**
  * Chat hooks - queries, mutations, and navigation
- * 
+ *
  * All chat operations grouped in one file.
  * Split from useChatStream which handles streaming logic separately.
  */
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Chat, Message, Provider, Todo, ToolCall } from '@normie/types';
-import { transformApiChat, transformApiChatLite } from '@normie/utils';
-import { chatApi } from '@/lib/api';
-import { setCurrentChatId } from '@/lib/storage';
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { Chat, Message, Provider, Todo, ToolCall } from "@normie/types";
+import { transformApiChat, transformApiChatLite } from "@normie/utils";
+import { chatApi } from "@/lib/api";
+import { setCurrentChatId } from "@/lib/storage";
 
 // ============================================
 // Query Keys
 // ============================================
 
 export const chatKeys = {
-  all: ['chats'] as const,
-  list: (workspaceId: string) => [...chatKeys.all, 'list', workspaceId] as const,
-  detail: (chatId: string) => [...chatKeys.all, 'detail', chatId] as const,
+  all: ["chats"] as const,
+  list: (workspaceId: string) =>
+    [...chatKeys.all, "list", workspaceId] as const,
+  detail: (chatId: string) => [...chatKeys.all, "detail", chatId] as const,
 };
 
 // ============================================
@@ -27,7 +28,7 @@ export const chatKeys = {
 
 /**
  * Fetch chats for a workspace
- * 
+ *
  * @example
  * const { data: chats, isLoading } = useChats(workspaceId);
  */
@@ -36,9 +37,9 @@ export function useChats(workspaceId: string | null | undefined) {
     queryKey: chatKeys.list(workspaceId!),
     queryFn: async (): Promise<Chat[]> => {
       if (!workspaceId) return [];
-      
+
       const chatsData = await chatApi.list(workspaceId);
-      
+
       // Transform and sort by updated time (most recent first)
       return chatsData
         .map(transformApiChatLite)
@@ -60,9 +61,9 @@ interface UseCurrentChatParams {
 
 interface UseCurrentChatReturn {
   chat: Chat | null;
-  messages: Chat['messages'];
-  todos: Chat['todos'];
-  toolCalls: Chat['toolCalls'];
+  messages: Chat["messages"];
+  todos: Chat["todos"];
+  toolCalls: Chat["toolCalls"];
   isLoading: boolean;
   isFetching: boolean;
   error: Error | null;
@@ -73,7 +74,9 @@ interface UseCurrentChatReturn {
  * Fetch current chat with messages via TanStack Query.
  * Provides instant cached data + background refetching.
  */
-export function useCurrentChat(params: UseCurrentChatParams): UseCurrentChatReturn {
+export function useCurrentChat(
+  params: UseCurrentChatParams,
+): UseCurrentChatReturn {
   const { workspaceId, chatId, enabled } = params;
   const queryClient = useQueryClient();
 
@@ -112,7 +115,7 @@ export function useCurrentChat(params: UseCurrentChatParams): UseCurrentChatRetu
         staleTime: 5 * 60 * 1000,
       });
     },
-    [queryClient]
+    [queryClient],
   );
 
   return {
@@ -145,21 +148,24 @@ export function useChatNavigation(): UseChatNavigationReturn {
   const queryClient = useQueryClient();
   const [currentChatId, setCurrentChatIdState] = useState<string | null>(null);
 
-  const navigateToChat = useCallback((chatId: string) => {
-    // Instant - no waiting for data
-    setCurrentChatIdState(chatId);
-    setCurrentChatId(chatId);
+  const navigateToChat = useCallback(
+    (chatId: string) => {
+      // Instant - no waiting for data
+      setCurrentChatIdState(chatId);
+      setCurrentChatId(chatId);
 
-    // Prefetch for instant feel if not already cached
-    queryClient.prefetchQuery({
-      queryKey: chatKeys.detail(chatId),
-      queryFn: async () => {
-        const { chatApi } = await import('@/lib/api');
-        return chatApi.get(chatId);
-      },
-      staleTime: 5 * 60 * 1000,
-    });
-  }, [queryClient]);
+      // Prefetch for instant feel if not already cached
+      queryClient.prefetchQuery({
+        queryKey: chatKeys.detail(chatId),
+        queryFn: async () => {
+          const { chatApi } = await import("@/lib/api");
+          return chatApi.get(chatId);
+        },
+        staleTime: 5 * 60 * 1000,
+      });
+    },
+    [queryClient],
+  );
 
   const navigateToNewChat = useCallback(() => {
     setCurrentChatIdState(null);
@@ -182,9 +188,9 @@ export function useChatNavigation(): UseChatNavigationReturn {
  */
 export function useDeleteChat() {
   const queryClient = useQueryClient();
-  
+
   return useQuery({
-    queryKey: ['chatDelete'],
+    queryKey: ["chatDelete"],
     queryFn: async () => {
       // This is just a trigger for the mutation
       return null;
@@ -198,18 +204,21 @@ export function useDeleteChat() {
  */
 export function useChatDelete() {
   const queryClient = useQueryClient();
-  
-  const deleteChat = useCallback(async (chatId: string) => {
-    try {
-      await chatApi.delete(chatId);
-      queryClient.invalidateQueries({ queryKey: ['chats', 'list'] });
-      queryClient.removeQueries({ queryKey: chatKeys.detail(chatId) });
-      return true;
-    } catch (err) {
-      console.error('[useChats] Failed to delete chat:', err);
-      throw err;
-    }
-  }, [queryClient]);
+
+  const deleteChat = useCallback(
+    async (chatId: string) => {
+      try {
+        await chatApi.delete(chatId);
+        queryClient.invalidateQueries({ queryKey: ["chats", "list"] });
+        queryClient.removeQueries({ queryKey: chatKeys.detail(chatId) });
+        return true;
+      } catch (err) {
+        console.error("[useChats] Failed to delete chat:", err);
+        throw err;
+      }
+    },
+    [queryClient],
+  );
 
   return { deleteChat };
 }
@@ -237,35 +246,28 @@ interface UseChatSenderParams {
       model: string;
       workspaceId: string | null;
       userId: string;
-      attachments?: Array<{
-        filename: string;
-        originalName: string;
-        mimeType: string;
-        size: number;
-        storagePath: string;
-      }>;
+      attachments?: Array<{ path: string }>;
     },
     callbacks?: {
       onTitleUpdate?: (title: string) => void;
-    }
+    },
   ) => Promise<{ chatId: string; chatTitle: string } | null>;
   setCurrentChat: (chat: Chat | null) => void;
 }
 
 interface UseChatSenderReturn {
-  sendMessage: (content: string, attachments?: Array<{
-    filename: string;
-    originalName: string;
-    mimeType: string;
-    size: number;
-    storagePath: string;
-  }>) => Promise<void>;
+  sendMessage: (
+    content: string,
+    attachments?: Array<{ path: string }>,
+  ) => Promise<void>;
 }
 
 /**
  * Handles the logic of sending a message and updating state.
  */
-export function useChatSender(params: UseChatSenderParams): UseChatSenderReturn {
+export function useChatSender(
+  params: UseChatSenderParams,
+): UseChatSenderReturn {
   const {
     currentChat,
     workspaceId,
@@ -284,22 +286,13 @@ export function useChatSender(params: UseChatSenderParams): UseChatSenderReturn 
   const generatedTitleRef = useRef<string | null>(null);
 
   const sendMessage = useCallback(
-    async (
-      content: string,
-      attachments?: Array<{
-        filename: string;
-        originalName: string;
-        mimeType: string;
-        size: number;
-        storagePath: string;
-      }>
-    ) => {
+    async (content: string, attachments?: Array<{ path: string }>) => {
       if (!content.trim() || isStreaming || !userId) return;
 
       const chatId = currentChat?.id || crypto.randomUUID();
       const chatTitle =
         currentChat?.title ||
-        (content.length > 30 ? content.substring(0, 30) + '...' : content);
+        (content.length > 30 ? content.substring(0, 30) + "..." : content);
 
       const result = await sendStreamMessage(
         {
@@ -316,13 +309,13 @@ export function useChatSender(params: UseChatSenderParams): UseChatSenderReturn 
           onTitleUpdate: (title) => {
             generatedTitleRef.current = title;
           },
-        }
+        },
       );
 
       if (result) {
         // Filter out error messages for final state
         const finalMessages: Message[] = messages.filter((m) =>
-          m.content ? !m.content.startsWith('[Error:') : true
+          m.content ? !m.content.startsWith("[Error:") : true,
         );
 
         const finalTitle = generatedTitleRef.current || result.chatTitle;
@@ -342,7 +335,7 @@ export function useChatSender(params: UseChatSenderParams): UseChatSenderReturn 
         generatedTitleRef.current = null;
 
         // Refresh chat list from server
-        queryClient.invalidateQueries({ queryKey: ['chats', 'list'] });
+        queryClient.invalidateQueries({ queryKey: ["chats", "list"] });
       }
     },
     [

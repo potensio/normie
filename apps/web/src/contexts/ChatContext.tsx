@@ -1,13 +1,28 @@
 /**
  * ChatContext - Stateless orchestrator combining chat hooks
- * 
+ *
  * This context does NOT hold state. It only combines hooks and exposes
  * their values through a unified API. All logic is in hooks for testability.
  */
-import { createContext, useContext, useState, useCallback } from 'react';
-import type { Chat, Message, Provider, ToolCall, Todo, ThinkingMode } from '@normie/types';
-import { useAuth } from './AuthContext';
-import { useChats, usePreferences, useChatStream, useChatSender, useCurrentChat, useChatNavigation, useChatDelete } from '@/hooks';
+import { createContext, useContext, useState, useCallback } from "react";
+import type {
+  Chat,
+  Message,
+  Provider,
+  ToolCall,
+  Todo,
+  ThinkingMode,
+} from "@normie/types";
+import { useAuth } from "./AuthContext";
+import {
+  useChats,
+  usePreferences,
+  useChatStream,
+  useChatSender,
+  useCurrentChat,
+  useChatNavigation,
+  useChatDelete,
+} from "@/hooks";
 
 interface ChatContextType {
   // State
@@ -28,13 +43,16 @@ interface ChatContextType {
   createNewChat: () => void;
   loadChat: (chatId: string) => void;
   deleteChat: (chatId: string) => Promise<void>;
-  sendMessage: (content: string, attachments?: Array<{
-    filename: string;
-    originalName: string;
-    mimeType: string;
-    size: number;
-    storagePath: string;
-  }>) => Promise<void>;
+  sendMessage: (
+    content: string,
+    attachments?: Array<{
+      filename: string;
+      originalName: string;
+      mimeType: string;
+      size: number;
+      storagePath: string;
+    }>,
+  ) => Promise<void>;
   stopStreaming: () => void;
   setProvider: (provider: Provider) => void;
   setModel: (model: string) => void;
@@ -49,10 +67,13 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const { isLoggedIn, currentWorkspace, user, clearAuthState } = useAuth();
 
   // TanStack Query for chats list
-  const { data: chats = [], refetch: refreshChats } = useChats(currentWorkspace?.id);
+  const { data: chats = [], refetch: refreshChats } = useChats(
+    currentWorkspace?.id,
+  );
 
   // NEW: Non-blocking chat navigation
-  const { currentChatId, navigateToChat, navigateToNewChat } = useChatNavigation();
+  const { currentChatId, navigateToChat, navigateToNewChat } =
+    useChatNavigation();
 
   // NEW: TanStack Query-powered chat loading (instant cached data + background refetch)
   const {
@@ -79,7 +100,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   } = usePreferences();
 
   // Thinking mode (simple local state)
-  const [thinkingMode, setThinkingMode] = useState<ThinkingMode>('normal');
+  const [thinkingMode, setThinkingMode] = useState<ThinkingMode>("normal");
 
   // Chat streaming (for new messages)
   const {
@@ -98,7 +119,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   // Combine messages: use stream messages when active, otherwise use loaded chat messages
   const displayMessages = streamMessages.length > 0 ? streamMessages : messages;
   const displayTodos = streamTodos.length > 0 ? streamTodos : (todos ?? []);
-  const displayToolCalls = streamToolCalls.length > 0 ? streamToolCalls : (toolCalls ?? []);
+  const displayToolCalls =
+    streamToolCalls.length > 0 ? streamToolCalls : (toolCalls ?? []);
 
   // Chat sender (for sending new messages)
   const { sendMessage: sendChatMessage } = useChatSender({
@@ -126,10 +148,13 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     navigateToNewChat();
   }, [navigateToNewChat, resetStream]);
 
-  const loadChat = useCallback((chatId: string) => {
-    resetStream();
-    navigateToChat(chatId);
-  }, [navigateToChat, resetStream]);
+  const loadChat = useCallback(
+    (chatId: string) => {
+      resetStream();
+      navigateToChat(chatId);
+    },
+    [navigateToChat, resetStream],
+  );
 
   const deleteChat = useCallback(
     async (chatId: string) => {
@@ -139,18 +164,15 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         navigateToNewChat();
       }
     },
-    [deleteChatAction, currentChatId, navigateToNewChat]
+    [deleteChatAction, currentChatId, navigateToNewChat],
   );
 
-  const sendMessage = useCallback(async (content: string, attachments?: Array<{
-    filename: string;
-    originalName: string;
-    mimeType: string;
-    size: number;
-    storagePath: string;
-  }>) => {
-    await sendChatMessage(content, attachments);
-  }, [sendChatMessage]);
+  const sendMessage = useCallback(
+    async (content: string, attachments?: Array<{ path: string }>) => {
+      await sendChatMessage(content, attachments);
+    },
+    [sendChatMessage],
+  );
 
   // Stop streaming wrapper
   const stopStreaming = useCallback(async () => {
@@ -159,16 +181,22 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   }, [isStreaming, currentChatId, selectedProvider, stopStream]);
 
   // Provider/model setters
-  const setProvider = useCallback((provider: Provider) => {
-    setProviderPreference(provider);
-  }, [setProviderPreference]);
+  const setProvider = useCallback(
+    (provider: Provider) => {
+      setProviderPreference(provider);
+    },
+    [setProviderPreference],
+  );
 
-  const setModel = useCallback((model: string) => {
-    setModelPreference(model);
-  }, [setModelPreference]);
+  const setModel = useCallback(
+    (model: string) => {
+      setModelPreference(model);
+    },
+    [setModelPreference],
+  );
 
   const toggleThinkingMode = useCallback(() => {
-    setThinkingMode((prev) => (prev === 'normal' ? 'extended' : 'normal'));
+    setThinkingMode((prev) => (prev === "normal" ? "extended" : "normal"));
   }, []);
 
   // Combined loading state:
@@ -209,7 +237,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 export function useChat() {
   const context = useContext(ChatContext);
   if (context === undefined) {
-    throw new Error('useChat must be used within a ChatProvider');
+    throw new Error("useChat must be used within a ChatProvider");
   }
   return context;
 }

@@ -1,19 +1,26 @@
 /**
  * Chat Stream Service
- * 
+ *
  * Handles streaming chat logic with Pi Agent.
  * Broken into smaller functions for testability.
  */
 
-import type { Response, Request } from 'express';
-import { eq, and } from 'drizzle-orm';
-import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
-import * as schema from '../db/schema.js';
-import { NotFoundError, ForbiddenError, ValidationError } from '../middleware/index.js';
-import { getValidatedModel, runPiQuery } from '../pi/index.js';
-import { resolveCredentials, type ResolvedCredentials } from '../pi/credentials.js';
-import { buildFullContext } from './context-builder.js';
-import { generateConversationTitle } from './title-generator.js';
+import type { Response, Request } from "express";
+import { eq, and } from "drizzle-orm";
+import type { NodePgDatabase } from "drizzle-orm/node-postgres";
+import * as schema from "../db/schema.js";
+import {
+  NotFoundError,
+  ForbiddenError,
+  ValidationError,
+} from "../middleware/index.js";
+import { getValidatedModel, runPiQuery } from "../pi/index.js";
+import {
+  resolveCredentials,
+  type ResolvedCredentials,
+} from "../pi/credentials.js";
+import { buildFullContext } from "./context-builder.js";
+import { generateConversationTitle } from "./title-generator.js";
 import {
   getChatById,
   createChat,
@@ -22,9 +29,9 @@ import {
   getChatMessageCount,
   updateChatSession,
   updateChatTitle,
-  type DbClient
-} from './chat.service.js';
-import type { StreamChunk } from '@normie/types';
+  type DbClient,
+} from "./chat.service.js";
+import type { StreamChunk } from "@normie/types";
 
 // ============================================
 // Types
@@ -38,11 +45,7 @@ export interface StreamParams {
   workspaceId: string;
   userId: string;
   attachments?: Array<{
-    filename: string;
-    originalName: string;
-    mimeType: string;
-    size: number;
-    storagePath: string;
+    path: string;
   }>;
 }
 
@@ -61,10 +64,10 @@ export interface StreamContext {
  * Setup SSE response headers
  */
 export function setupSSEResponse(res: Response): void {
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no"); // Disable nginx buffering
   res.flushHeaders();
 }
 
@@ -83,7 +86,7 @@ export function sendSSEEvent(res: Response, chunk: StreamChunk): void {
 export function startHeartbeat(res: Response): NodeJS.Timeout {
   return setInterval(() => {
     if (!res.writableEnded) {
-      res.write(': heartbeat\n\n');
+      res.write(": heartbeat\n\n");
     }
   }, 15000);
 }
@@ -105,14 +108,14 @@ export function stopHeartbeat(interval: NodeJS.Timeout): void {
  */
 export async function getOrCreateStreamChat(
   db: DbClient,
-  params: StreamParams
+  params: StreamParams,
 ): Promise<StreamContext> {
   const { chatId, message, provider, model, workspaceId, userId } = params;
 
   // Try to get existing chat
   let chat: typeof schema.chats.$inferSelect | null = null;
   let isNewChat = false;
-  let initialTitle = '';
+  let initialTitle = "";
 
   try {
     chat = await getChatById(db, chatId);
@@ -127,27 +130,37 @@ export async function getOrCreateStreamChat(
 
   if (!chat) {
     // Create new chat
-    console.log('[STREAM] Creating new chat:', chatId);
-    
+    console.log("[STREAM] Creating new chat:", chatId);
+
     // Generate title from first message
-    initialTitle = message.length > 50 
-      ? message.substring(0, 47) + '...' 
-      : message;
+    initialTitle =
+      message.length > 50 ? message.substring(0, 47) + "..." : message;
 
-    chat = await createChat(db, workspaceId, userId, {
-      title: initialTitle,
-      provider,
-      model
-    }, chatId);
+    chat = await createChat(
+      db,
+      workspaceId,
+      userId,
+      {
+        title: initialTitle,
+        provider,
+        model,
+      },
+      chatId,
+    );
 
-    console.log('[STREAM] Created new chat:', chat.id, 'with title:', initialTitle);
+    console.log(
+      "[STREAM] Created new chat:",
+      chat.id,
+      "with title:",
+      initialTitle,
+    );
   }
 
   return {
     chat,
     workspaceId: workspaceId || chat.workspaceId,
     isNewChat,
-    initialTitle
+    initialTitle,
   };
 }
 
@@ -157,14 +170,15 @@ export async function getOrCreateStreamChat(
 export async function verifyWorkspaceAccess(
   db: DbClient,
   workspaceId: string,
-  userId: string
+  userId: string,
 ): Promise<void> {
-  const [workspace] = await db.select()
+  const [workspace] = await db
+    .select()
     .from(schema.workspaces)
     .where(eq(schema.workspaces.id, workspaceId));
 
   if (!workspace) {
-    throw new NotFoundError('Workspace');
+    throw new NotFoundError("Workspace");
   }
 
   // Owner has access
@@ -173,20 +187,23 @@ export async function verifyWorkspaceAccess(
   }
 
   // Check membership
-  const [membership] = await db.select()
+  const [membership] = await db
+    .select()
     .from(schema.workspaceMembers)
-    .where(and(
-      eq(schema.workspaceMembers.workspaceId, workspaceId),
-      eq(schema.workspaceMembers.userId, userId)
-    ));
+    .where(
+      and(
+        eq(schema.workspaceMembers.workspaceId, workspaceId),
+        eq(schema.workspaceMembers.userId, userId),
+      ),
+    );
 
   if (!membership) {
-    throw new ForbiddenError('Access denied to workspace');
+    throw new ForbiddenError("Access denied to workspace");
   }
 
   // Viewers cannot create chats
-  if (membership.role === 'viewer') {
-    throw new ForbiddenError('Viewers cannot create chats');
+  if (membership.role === "viewer") {
+    throw new ForbiddenError("Viewers cannot create chats");
   }
 }
 
@@ -199,14 +216,16 @@ export async function verifyWorkspaceAccess(
  */
 export async function resolveProviderCredentials(
   userId: string,
-  provider: string
+  provider: string,
 ): Promise<ResolvedCredentials> {
   const credentials = await resolveCredentials(userId, provider);
-  
+
   console.log(`[STREAM] Credentials source: ${credentials.source}`);
-  
-  if (!credentials.configured && provider !== 'amazon-bedrock') {
-    throw new ValidationError(credentials.error || `No API key configured for ${provider}`);
+
+  if (!credentials.configured && provider !== "amazon-bedrock") {
+    throw new ValidationError(
+      credentials.error || `No API key configured for ${provider}`,
+    );
   }
 
   return credentials;
@@ -220,17 +239,12 @@ export async function buildStreamContext(
   workspaceId: string,
   chatId: string,
   message: string,
-  options?: { model?: string; attachments?: StreamParams['attachments'] }
+  options?: { attachments?: StreamParams["attachments"] },
 ): Promise<{
   systemPrompt: string | null;
-  messages: Array<{ 
-    role: string; 
-    content: string | Array<{ 
-      type: 'text' | 'image'; 
-      text?: string;
-      data?: string;
-      mimeType?: string;
-    }> 
+  messages: Array<{
+    role: string;
+    content: string;
   }>;
 }> {
   const contextResult = await buildFullContext(
@@ -238,21 +252,20 @@ export async function buildStreamContext(
     chatId,
     message,
     db,
-    { 
+    {
       maxMessages: 20,
-      model: options?.model,
-      pendingAttachments: options?.attachments
-    }
+      pendingAttachments: options?.attachments,
+    },
   );
 
-  console.log('[STREAM] Built context:', {
+  console.log("[STREAM] Built context:", {
     hasSystemPrompt: !!contextResult.systemPrompt,
-    messageCount: contextResult.messages.length
+    messageCount: contextResult.messages.length,
   });
 
   return {
     systemPrompt: contextResult.systemPrompt || null,
-    messages: contextResult.messages
+    messages: contextResult.messages,
   };
 }
 
@@ -267,18 +280,20 @@ export async function saveUserMessage(
   db: DbClient,
   chatId: string,
   content: string,
-  attachments?: StreamParams['attachments']
+  attachments?: StreamParams["attachments"],
 ): Promise<string> {
   const message = await addUserMessage(db, chatId, content);
-  console.log('[STREAM] Saved user message:', message.id);
-  
-  // Save attachment metadata if provided
+  console.log("[STREAM] Saved user message:", message.id);
+
+  // No need to save attachment metadata - paths are already in message content!
   if (attachments && attachments.length > 0) {
-    const { saveAttachmentsMetadata } = await import('./file.service.js');
-    await saveAttachmentsMetadata(db, message.id, attachments);
-    console.log('[STREAM] Saved', attachments.length, 'attachment(s)');
+    console.log(
+      "[STREAM] Message includes",
+      attachments.length,
+      "attachment path(s)",
+    );
   }
-  
+
   return message.id;
 }
 
@@ -289,11 +304,11 @@ export async function saveAssistantResponse(
   db: DbClient,
   chatId: string,
   content: string,
-  sessionId?: string
+  sessionId?: string,
 ): Promise<void> {
   // Save message
   await addAssistantMessage(db, chatId, content);
-  console.log('[STREAM] Saved assistant response');
+  console.log("[STREAM] Saved assistant response");
 
   // Update session if provided
   if (sessionId) {
@@ -319,22 +334,22 @@ export async function generateAndSaveTitle(
   db: DbClient,
   chatId: string,
   userMessage: string,
-  assistantResponse: string
+  assistantResponse: string,
 ): Promise<string> {
-  console.log('[STREAM] First exchange, generating title...');
-  
+  console.log("[STREAM] First exchange, generating title...");
+
   try {
     const title = await generateConversationTitle({
       userMessage,
-      assistantResponse
+      assistantResponse,
     });
 
     await updateChatTitle(db, chatId, title);
-    console.log('[STREAM] Generated title:', title);
-    
+    console.log("[STREAM] Generated title:", title);
+
     return title;
   } catch (error) {
-    console.error('[STREAM] Title generation failed:', error);
+    console.error("[STREAM] Title generation failed:", error);
     throw error;
   }
 }
@@ -345,7 +360,7 @@ export async function generateAndSaveTitle(
 
 /**
  * Stream a chat message using Pi Agent
- * 
+ *
  * This is the main orchestrator function that:
  * 1. Verifies access
  * 2. Sets up SSE
@@ -360,17 +375,18 @@ export async function streamChat(
   db: DbClient,
   params: StreamParams,
   res: Response,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<void> {
-  const { chatId, message, provider, model, workspaceId, userId, attachments } = params;
+  const { chatId, message, provider, model, workspaceId, userId, attachments } =
+    params;
 
-  console.log('='.repeat(60));
-  console.log('[STREAM] Starting stream');
+  console.log("=".repeat(60));
+  console.log("[STREAM] Starting stream");
   console.log(`[STREAM] Chat: ${chatId}`);
   console.log(`[STREAM] Provider: ${provider}`);
   console.log(`[STREAM] Model: ${model}`);
   console.log(`[STREAM] Attachments: ${attachments?.length || 0}`);
-  console.log('='.repeat(60));
+  console.log("=".repeat(60));
 
   // 1. Setup SSE
   setupSSEResponse(res);
@@ -384,34 +400,35 @@ export async function streamChat(
   // Merge external signal with internal abort
   const effectiveSignal = signal || abortController.signal;
 
-  let assistantResponse = '';
+  let assistantResponse = "";
   let sessionId: string | undefined;
   let usedToolkits: string[] = [];
 
   // Register session with tracker
-  const { getActiveSessionTracker } = await import('./active-session-tracker.service.js');
+  const { getActiveSessionTracker } =
+    await import("./active-session-tracker.service.js");
   const sessionTracker = getActiveSessionTracker();
 
   try {
     // 2. Get or create chat
     const context = await getOrCreateStreamChat(db, params);
-    
+
     // Emit title for new chats
     if (context.isNewChat && context.initialTitle) {
       sendSSEEvent(res, {
-        type: 'title_update',
-        title: context.initialTitle
+        type: "title_update",
+        title: context.initialTitle,
       });
     }
 
     // 3. Resolve credentials
     const credentials = await resolveProviderCredentials(userId, provider);
-    
-    if (!credentials.configured && provider !== 'amazon-bedrock') {
+
+    if (!credentials.configured && provider !== "amazon-bedrock") {
       sendSSEEvent(res, {
-        type: 'error',
-        message: credentials.error || 'No API key configured',
-        provider
+        type: "error",
+        message: credentials.error || "No API key configured",
+        provider,
       });
       stopHeartbeat(heartbeat);
       res.end();
@@ -427,16 +444,17 @@ export async function streamChat(
       context.workspaceId,
       chatId,
       message,
-      { model, attachments }
+      { attachments },
     );
 
     // 6. Get Composio client
     let composioClient: unknown = null;
     try {
-      const { getComposioClient } = await import('../pi/tools/composio-tools.js');
+      const { getComposioClient } =
+        await import("../pi/tools/composio-tools.js");
       composioClient = getComposioClient();
     } catch (err) {
-      console.warn('[STREAM] Composio not available:', (err as Error).message);
+      console.warn("[STREAM] Composio not available:", (err as Error).message);
     }
 
     // 7. Stream from Pi Agent
@@ -452,18 +470,18 @@ export async function streamChat(
       signal: effectiveSignal,
       sessionId: context.chat.sessionFilePath || undefined,
       credentials,
-      db
+      db,
     })) {
       // Send to client
       sendSSEEvent(res, chunk);
 
       // Capture session ID
-      if (chunk.type === 'session_init' && 'session_id' in chunk) {
+      if (chunk.type === "session_init" && "session_id" in chunk) {
         sessionId = chunk.session_id;
       }
 
       // Track toolkits in use
-      if (chunk.type === 'tool_use' && 'input' in chunk) {
+      if (chunk.type === "tool_use" && "input" in chunk) {
         const input = chunk.input as { toolkitSlug?: string };
         if (input?.toolkitSlug && !usedToolkits.includes(input.toolkitSlug)) {
           usedToolkits.push(input.toolkitSlug);
@@ -471,14 +489,19 @@ export async function streamChat(
       }
 
       // Accumulate response
-      if (chunk.type === 'text' && !chunk.isReasoning) {
-        assistantResponse += chunk.content || '';
+      if (chunk.type === "text" && !chunk.isReasoning) {
+        assistantResponse += chunk.content || "";
       }
     }
 
     // Register toolkits used in this session
     if (usedToolkits.length > 0) {
-      sessionTracker.registerSession(chatId, context.workspaceId, userId, usedToolkits);
+      sessionTracker.registerSession(
+        chatId,
+        context.workspaceId,
+        userId,
+        usedToolkits,
+      );
     }
 
     // 8. Save assistant response
@@ -487,7 +510,7 @@ export async function streamChat(
 
       // 9. Generate title after first exchange
       const messageCount = await getChatMessageCount(db, chatId);
-      console.log('[STREAM] Message count:', messageCount);
+      console.log("[STREAM] Message count:", messageCount);
 
       if (shouldGenerateTitle(messageCount)) {
         try {
@@ -495,18 +518,18 @@ export async function streamChat(
             db,
             chatId,
             message,
-            assistantResponse
+            assistantResponse,
           );
 
           // Send title update
           if (!res.writableEnded) {
             sendSSEEvent(res, {
-              type: 'title_update',
-              title
+              type: "title_update",
+              title,
             });
           }
         } catch (err) {
-          console.error('[STREAM] Title generation failed:', err);
+          console.error("[STREAM] Title generation failed:", err);
         }
       }
     }
@@ -519,22 +542,21 @@ export async function streamChat(
       res.end();
     }
 
-    console.log('[STREAM] Completed');
-
+    console.log("[STREAM] Completed");
   } catch (error) {
     // Unregister session on error too
     sessionTracker.unregisterSession(chatId);
 
     stopHeartbeat(heartbeat);
-    console.error('[STREAM] Error:', error);
+    console.error("[STREAM] Error:", error);
 
     // Handle abort
-    if ((error as Error).name === 'AbortError' || effectiveSignal.aborted) {
-      console.log('[STREAM] Request aborted by user');
+    if ((error as Error).name === "AbortError" || effectiveSignal.aborted) {
+      console.log("[STREAM] Request aborted by user");
       if (!res.writableEnded) {
         sendSSEEvent(res, {
-          type: 'aborted',
-          provider
+          type: "aborted",
+          provider,
         });
         res.end();
       }
@@ -542,9 +564,9 @@ export async function streamChat(
       // Handle other errors
       if (!res.writableEnded) {
         sendSSEEvent(res, {
-          type: 'error',
+          type: "error",
           message: (error as Error).message,
-          provider
+          provider,
         });
         res.end();
       }
@@ -560,12 +582,12 @@ export async function streamChatWithRequest(
   db: DbClient,
   params: StreamParams,
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> {
   // Setup abort handling from request
   const abortController = new AbortController();
-  
-  req.on('close', () => {
+
+  req.on("close", () => {
     abortController.abort();
   });
 

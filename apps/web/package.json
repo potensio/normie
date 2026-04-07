@@ -11,6 +11,7 @@
   "dependencies": {
     "@normie/types": "workspace:*",
     "@normie/utils": "workspace:*",
+    "@phosphor-icons/react": "^2.1.10",
     "@tanstack/react-query": "^5.96.2",
     "@types/react-syntax-highlighter": "^15.5.13",
     "framer-motion": "^12.38.0",

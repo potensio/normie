@@ -2,47 +2,85 @@
  * AttachmentDisplay - Single attachment preview with click-to-open behavior
  */
 
-import { memo, useCallback, useState, useEffect } from 'react';
-import { FileText, Image as ImageIcon, FileCode, File, ExternalLink } from 'lucide-react';
-import type { Attachment } from '@normie/types';
-import { formatFileSize, isImageFile } from '@/lib/file-validation';
+import { memo, useCallback, useState, useEffect } from "react";
+import {
+  FileText,
+  Image as ImageIcon,
+  FileCode,
+  File,
+  ExternalLink,
+} from "lucide-react";
+import type { Attachment } from "@normie/types";
 
 interface AttachmentDisplayProps {
   attachment: Attachment;
 }
 
 /**
+ * Format file size for display
+ */
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/**
+ * Check if file is an image by extension
+ */
+function isImageFile(filename: string): boolean {
+  const ext = filename.toLowerCase().split(".").pop() || "";
+  return ["png", "jpg", "jpeg", "gif", "webp", "bmp"].includes(ext);
+}
+
+/**
  * Get file icon based on extension
  */
 function getFileIcon(filename: string) {
-  const ext = filename.toLowerCase().split('.').pop() || '';
-  
+  const ext = filename.toLowerCase().split(".").pop() || "";
+
   // Code files
-  if (['ts', 'tsx', 'js', 'jsx', 'py', 'go', 'rs', 'java', 'kt', 'swift', 'c', 'cpp', 'h'].includes(ext)) {
+  if (
+    [
+      "ts",
+      "tsx",
+      "js",
+      "jsx",
+      "py",
+      "go",
+      "rs",
+      "java",
+      "kt",
+      "swift",
+      "c",
+      "cpp",
+      "h",
+    ].includes(ext)
+  ) {
     return <FileCode className="w-5 h-5 text-blue-500" />;
   }
-  
+
   // Image files
-  if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'].includes(ext)) {
+  if (["png", "jpg", "jpeg", "gif", "webp", "bmp"].includes(ext)) {
     return <ImageIcon className="w-5 h-5 text-green-500" />;
   }
-  
+
   // Text files
-  if (['txt', 'md', 'json', 'csv', 'xml', 'yaml', 'yml'].includes(ext)) {
+  if (["txt", "md", "json", "csv", "xml", "yaml", "yml"].includes(ext)) {
     return <FileText className="w-5 h-5 text-orange-500" />;
   }
-  
+
   // PDF
-  if (ext === 'pdf') {
+  if (ext === "pdf") {
     return <FileText className="w-5 h-5 text-red-500" />;
   }
-  
+
   // Default
   return <File className="w-5 h-5 text-zinc-400" />;
 }
 
-export const AttachmentDisplay = memo(function AttachmentDisplay({ 
-  attachment 
+export const AttachmentDisplay = memo(function AttachmentDisplay({
+  attachment,
 }: AttachmentDisplayProps) {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -52,12 +90,13 @@ export const AttachmentDisplay = memo(function AttachmentDisplay({
   useEffect(() => {
     if (isImage && attachment.storagePath) {
       setIsLoading(true);
-      window.electronAPI?.readAttachment(attachment.storagePath)
+      window.electronAPI
+        ?.readAttachment(attachment.storagePath)
         .then((result) => {
           setImageUrl(result.data);
         })
         .catch((err) => {
-          console.error('[AttachmentDisplay] Failed to load image:', err);
+          console.error("[AttachmentDisplay] Failed to load image:", err);
         })
         .finally(() => {
           setIsLoading(false);
@@ -104,7 +143,7 @@ export const AttachmentDisplay = memo(function AttachmentDisplay({
           {attachment.originalName}
         </span>
         <span className="text-xs text-zinc-400">
-          {formatFileSize(attachment.size)}
+          {formatSize(attachment.size)}
         </span>
       </div>
 

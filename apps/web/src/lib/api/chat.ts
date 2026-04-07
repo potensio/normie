@@ -1,9 +1,9 @@
 /**
  * Chat API - All chat-related API calls
- * 
+ *
  * Uses window.authAPI for chat CRUD and window.electronAPI for streaming.
  */
-import type { Chat, Provider } from '@normie/types';
+import type { Chat, Provider } from "@normie/types";
 
 export interface ApiChat {
   id: string | number;
@@ -12,9 +12,9 @@ export interface ApiChat {
   model?: string;
   sessionId?: string;
   updatedAt?: string | Date;
-  messages?: Chat['messages'];
-  todos?: Chat['todos'];
-  toolCalls?: Chat['toolCalls'];
+  messages?: Chat["messages"];
+  todos?: Chat["todos"];
+  toolCalls?: Chat["toolCalls"];
 }
 
 export const chatApi = {
@@ -22,7 +22,7 @@ export const chatApi = {
    * Get all chats for a workspace
    */
   list: async (workspaceId: string): Promise<ApiChat[]> => {
-    if (!window.authAPI) throw new Error('Auth API not available');
+    if (!window.authAPI) throw new Error("Auth API not available");
     return window.authAPI.getChats(workspaceId);
   },
 
@@ -30,7 +30,7 @@ export const chatApi = {
    * Get a single chat with messages
    */
   get: async (chatId: string): Promise<ApiChat> => {
-    if (!window.authAPI) throw new Error('Auth API not available');
+    if (!window.authAPI) throw new Error("Auth API not available");
     return window.authAPI.getChat(chatId);
   },
 
@@ -38,7 +38,7 @@ export const chatApi = {
    * Delete a chat
    */
   delete: async (chatId: string): Promise<void> => {
-    if (!window.authAPI) throw new Error('Auth API not available');
+    if (!window.authAPI) throw new Error("Auth API not available");
     await window.authAPI.deleteChat(chatId);
   },
 
@@ -53,18 +53,20 @@ export const chatApi = {
     model: string;
     workspaceId: string | null;
     userId: string;
-    attachments?: Array<{
-      filename: string;
-      originalName: string;
-      mimeType: string;
-      size: number;
-      storagePath: string;
-    }>;
+    attachments?: Array<{ path: string }>;
   }): Promise<{ read: () => Promise<{ done: boolean; value?: string }> }> => {
-    const { content, chatId, provider, model, workspaceId, userId, attachments } = params;
-    
+    const {
+      content,
+      chatId,
+      provider,
+      model,
+      workspaceId,
+      userId,
+      attachments,
+    } = params;
+
     if (!window.electronAPI) {
-      throw new Error('Electron API not available');
+      throw new Error("Electron API not available");
     }
 
     const response = await window.electronAPI.sendMessage(
@@ -74,7 +76,7 @@ export const chatApi = {
       model,
       workspaceId,
       userId,
-      attachments
+      attachments,
     );
 
     return response.getReader();
@@ -91,18 +93,21 @@ export const chatApi = {
   /**
    * Update message metadata (for blocks persistence)
    */
-  updateMessageBlocks: async (messageId: string, blocks: unknown[]): Promise<void> => {
-    if (!window.authAPI) throw new Error('Auth API not available');
+  updateMessageBlocks: async (
+    messageId: string,
+    blocks: unknown[],
+  ): Promise<void> => {
+    if (!window.authAPI) throw new Error("Auth API not available");
     // Call the backend endpoint
     const response = await fetch(`/api/chats/messages/${messageId}/metadata`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ blocks }),
-      credentials: 'include',
+      credentials: "include",
     });
-    
+
     if (!response.ok) {
-      throw new Error('Failed to update message blocks');
+      throw new Error("Failed to update message blocks");
     }
   },
 };

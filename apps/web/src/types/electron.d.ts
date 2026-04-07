@@ -1,10 +1,13 @@
 // Type definitions for Electron API exposed via contextBridge
 
-import type { Attachment } from '@normie/types';
+import type { Attachment } from "@normie/types";
 
 export interface ElectronAPI {
   abortCurrentRequest: () => void;
-  stopQuery: (chatId: string, provider?: string) => Promise<{ success: boolean; error?: string }>;
+  stopQuery: (
+    chatId: string,
+    provider?: string,
+  ) => Promise<{ success: boolean; error?: string }>;
   sendMessage: (
     message: string,
     chatId: string,
@@ -12,13 +15,7 @@ export interface ElectronAPI {
     model?: string | null,
     workspaceId?: string | null,
     userId?: string | null,
-    attachments?: Array<{
-      filename: string;
-      originalName: string;
-      mimeType: string;
-      size: number;
-      storagePath: string;
-    }>
+    attachments?: Array<{ path: string }>,
   ) => Promise<{
     getReader: () => Promise<{
       read: () => Promise<{ done: boolean; value?: string }>;
@@ -26,24 +23,28 @@ export interface ElectronAPI {
   }>;
   getProviders: () => Promise<{ providers: string[]; default: string }>;
   openExternal: (url: string) => Promise<void>;
-  
+
   // File attachment APIs
-  selectFiles: () => Promise<SelectFilesResult>;
-  readFileAsDataUrl: (filePath: string) => Promise<string>;
-  saveAttachments: (chatId: string, files: Array<{ data: string; name: string; type: string; size: number }>) => Promise<SaveAttachmentsResult>;
-  readAttachment: (storagePath: string) => Promise<{ data: string; mimeType: string }>;
+  selectPaths: () => Promise<SelectPathsResult>;
+  saveAttachments: (
+    chatId: string,
+    files: Array<{ data: string; name: string; type: string; size: number }>,
+  ) => Promise<SaveAttachmentsResult>;
+  readAttachment: (
+    storagePath: string,
+  ) => Promise<{ data: string; mimeType: string }>;
   openAttachment: (storagePath: string) => Promise<void>;
   deleteChatAttachments: (chatId: string) => Promise<void>;
 }
 
-// Result from file selection dialog
-export interface SelectFilesResult {
+// Result from path selection dialog (files or folders)
+export interface SelectPathsResult {
   success: boolean;
-  files?: Array<{
+  paths?: Array<{
     path: string;
     name: string;
+    isDirectory: boolean;
     size: number;
-    type: string;
   }>;
   error?: string;
 }
@@ -64,7 +65,11 @@ export interface SaveAttachmentsResult {
 export interface AuthAPI {
   initAuth: () => Promise<boolean>;
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, displayName?: string) => Promise<void>;
+  register: (
+    email: string,
+    password: string,
+    displayName?: string,
+  ) => Promise<void>;
   logout: () => Promise<void>;
   getUser: () => User | null;
   getCurrentWorkspace: () => Workspace | null;

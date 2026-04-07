@@ -9,7 +9,7 @@
  *
  * If your backend sends big chunks infrequently, NO frontend trick will help.
  */
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback } from "react";
 import type {
   Message,
   ToolCall,
@@ -19,20 +19,20 @@ import type {
   MessageBlock,
   TextBlock,
   ToolBlock,
-} from '@normie/types';
-import { generateId } from '@normie/utils';
-import { chatApi } from '@/lib/api';
-import { queryClient } from '@/lib/query-client';
-import { classifyToolError } from '@/lib/error-messages';
+} from "@normie/types";
+import { generateId } from "@normie/utils";
+import { chatApi } from "@/lib/api";
+import { queryClient } from "@/lib/query-client";
+import { classifyToolError } from "@/lib/error-messages";
 
 // Helper to check if error is a user-initiated abort
 function isAbortError(error: unknown): boolean {
   if (error instanceof Error) {
     return (
-      error.name === 'AbortError' ||
-      error.message?.includes('abort') ||
-      error.message?.includes('cancelled') ||
-      error.message?.includes('The operation was aborted')
+      error.name === "AbortError" ||
+      error.message?.includes("abort") ||
+      error.message?.includes("cancelled") ||
+      error.message?.includes("The operation was aborted")
     );
   }
   return false;
@@ -56,7 +56,7 @@ interface UseChatStreamReturn {
     },
     callbacks?: {
       onTitleUpdate?: (title: string) => void;
-    }
+    },
   ) => Promise<{ chatId: string; chatTitle: string } | null>;
   stopStreaming: (chatId: string, provider: Provider) => Promise<void>;
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
@@ -79,7 +79,7 @@ function mergeTextBlocks(blocks: MessageBlock[]): MessageBlock[] {
   for (const block of blocks) {
     const lastBlock = result[result.length - 1];
 
-    if (block.type === 'text' && lastBlock?.type === 'text') {
+    if (block.type === "text" && lastBlock?.type === "text") {
       // Merge with previous text block
       lastBlock.content += block.content;
     } else {
@@ -110,16 +110,12 @@ export function useChatStream(): UseChatStreamReturn {
   }, []);
 
   const loadMessages = useCallback(
-    (chat: {
-      messages: Message[];
-      todos?: Todo[];
-      toolCalls?: ToolCall[];
-    }) => {
+    (chat: { messages: Message[]; todos?: Todo[]; toolCalls?: ToolCall[] }) => {
       setMessages(chat.messages);
       setTodos(chat.todos || []);
       setToolCalls(chat.toolCalls || []);
     },
-    []
+    [],
   );
 
   const stopStreaming = useCallback(
@@ -130,7 +126,7 @@ export function useChatStream(): UseChatStreamReturn {
       }
       setIsStreaming(false);
     },
-    []
+    [],
   );
 
   const sendMessage = useCallback(
@@ -143,17 +139,11 @@ export function useChatStream(): UseChatStreamReturn {
         model: string;
         workspaceId: string | null;
         userId: string;
-        attachments?: Array<{
-          filename: string;
-          originalName: string;
-          mimeType: string;
-          size: number;
-          storagePath: string;
-        }>;
+        attachments?: Array<{ path: string }>;
       },
       callbacks?: {
         onTitleUpdate?: (title: string) => void;
-      }
+      },
     ): Promise<{ chatId: string; chatTitle: string } | null> => {
       const {
         content,
@@ -170,8 +160,8 @@ export function useChatStream(): UseChatStreamReturn {
 
       const userMessage: Message = {
         id: generateId(),
-        role: 'user',
-        blocks: [{ type: 'text', content: content.trim() }],
+        role: "user",
+        blocks: [{ type: "text", content: content.trim() }],
       };
 
       // Add user message
@@ -183,9 +173,9 @@ export function useChatStream(): UseChatStreamReturn {
         ...prev,
         {
           id: assistantMessageId,
-          role: 'assistant',
+          role: "assistant",
           blocks: [],
-          reasoning: '',
+          reasoning: "",
         },
       ]);
 
@@ -203,7 +193,7 @@ export function useChatStream(): UseChatStreamReturn {
         });
 
         let blocks: MessageBlock[] = [];
-        let fullReasoning = '';
+        let fullReasoning = "";
         const pendingToolCalls = new Map<
           string,
           { localId: string; startTime: number }
@@ -215,16 +205,16 @@ export function useChatStream(): UseChatStreamReturn {
           if (!value) continue;
 
           // Parse SSE data
-          const lines = value.split('\n');
+          const lines = value.split("\n");
           for (const line of lines) {
-            if (line.startsWith(':')) continue;
-            if (!line.startsWith('data: ')) continue;
+            if (line.startsWith(":")) continue;
+            if (!line.startsWith("data: ")) continue;
 
             try {
               const data = JSON.parse(line.slice(6));
 
               switch (data.type) {
-                case 'text':
+                case "text":
                   if (data.content) {
                     if (data.isReasoning) {
                       fullReasoning += data.content;
@@ -232,21 +222,25 @@ export function useChatStream(): UseChatStreamReturn {
                       // Append text block
                       blocks = mergeTextBlocks([
                         ...blocks,
-                        { type: 'text', content: data.content } as TextBlock,
+                        { type: "text", content: data.content } as TextBlock,
                       ]);
                     }
                     // Update message with new blocks
                     setMessages((prev) =>
                       prev.map((m) =>
                         m.id === assistantMessageId
-                          ? { ...m, blocks: [...blocks], reasoning: fullReasoning }
-                          : m
-                      )
+                          ? {
+                              ...m,
+                              blocks: [...blocks],
+                              reasoning: fullReasoning,
+                            }
+                          : m,
+                      ),
                     );
                   }
                   break;
 
-                case 'connection_action':
+                case "connection_action":
                   // Handle connection action from connect_toolkit tool
                   if (data.data) {
                     const localToolId = generateId();
@@ -255,12 +249,12 @@ export function useChatStream(): UseChatStreamReturn {
                     // Create an inline tool call for the connection
                     const inlineToolCall: InlineToolCall = {
                       id: localToolId,
-                      name: 'connect_toolkit',
+                      name: "connect_toolkit",
                       input: {
                         toolkitSlug: data.data.toolkitSlug,
                         reason: data.data.message,
                       },
-                      status: 'success',
+                      status: "success",
                       result: data.data,
                       startTime,
                       duration: 0,
@@ -269,18 +263,18 @@ export function useChatStream(): UseChatStreamReturn {
                     // Append tool block with connection result
                     blocks = [
                       ...blocks,
-                      { type: 'tool', toolCall: inlineToolCall } as ToolBlock,
+                      { type: "tool", toolCall: inlineToolCall } as ToolBlock,
                     ];
 
                     // Also track in ToolCall[] state
                     const toolCall: ToolCall = {
                       id: localToolId,
-                      name: 'connect_toolkit',
+                      name: "connect_toolkit",
                       input: {
                         toolkitSlug: data.data.toolkitSlug,
                         reason: data.data.message,
                       },
-                      status: 'success',
+                      status: "success",
                       result: data.data,
                     };
                     setToolCalls((prev) => [...prev, toolCall]);
@@ -289,14 +283,18 @@ export function useChatStream(): UseChatStreamReturn {
                     setMessages((prev) =>
                       prev.map((m) =>
                         m.id === assistantMessageId
-                          ? { ...m, blocks: [...blocks], reasoning: fullReasoning }
-                          : m
-                      )
+                          ? {
+                              ...m,
+                              blocks: [...blocks],
+                              reasoning: fullReasoning,
+                            }
+                          : m,
+                      ),
                     );
                   }
                   break;
 
-                case 'tool_use':
+                case "tool_use":
                   if (data.name) {
                     const localToolId = generateId();
                     const startTime = Date.now();
@@ -306,7 +304,7 @@ export function useChatStream(): UseChatStreamReturn {
                       id: localToolId,
                       name: data.name,
                       input: data.input || {},
-                      status: 'running',
+                      status: "running",
                     };
                     setToolCalls((prev) => [...prev, toolCall]);
 
@@ -323,31 +321,35 @@ export function useChatStream(): UseChatStreamReturn {
                       id: localToolId,
                       name: data.name,
                       input: data.input || {},
-                      status: 'running',
+                      status: "running",
                       startTime,
                     };
                     blocks = [
                       ...blocks,
-                      { type: 'tool', toolCall: inlineToolCall } as ToolBlock,
+                      { type: "tool", toolCall: inlineToolCall } as ToolBlock,
                     ];
 
                     // Update message
                     setMessages((prev) =>
                       prev.map((m) =>
                         m.id === assistantMessageId
-                          ? { ...m, blocks: [...blocks], reasoning: fullReasoning }
-                          : m
-                      )
+                          ? {
+                              ...m,
+                              blocks: [...blocks],
+                              reasoning: fullReasoning,
+                            }
+                          : m,
+                      ),
                     );
 
                     // Handle TodoWrite
-                    if (data.name === 'TodoWrite' && data.input?.todos) {
+                    if (data.name === "TodoWrite" && data.input?.todos) {
                       setTodos(data.input.todos as Todo[]);
                     }
                   }
                   break;
 
-                case 'tool_result':
+                case "tool_result":
                   if (data.tool_use_id || data.result !== undefined) {
                     const apiToolId = data.tool_use_id;
                     const tracking = apiToolId
@@ -356,38 +358,40 @@ export function useChatStream(): UseChatStreamReturn {
 
                     if (tracking) {
                       const { localId, startTime } = tracking;
-                      const duration = Math.round((Date.now() - startTime) / 100) / 10;
+                      const duration =
+                        Math.round((Date.now() - startTime) / 100) / 10;
 
                       // Update ToolCall[] state
-                      const isError = data.result?.error || data.result?.status === 'error';
+                      const isError =
+                        data.result?.error || data.result?.status === "error";
                       setToolCalls((prev) =>
                         prev.map((t) =>
                           t.id === localId
                             ? {
                                 ...t,
-                                status: isError ? 'error' : 'success',
+                                status: isError ? "error" : "success",
                                 result: data.result,
                               }
-                            : t
-                        )
+                            : t,
+                        ),
                       );
 
                       // Update tool block in blocks array
                       blocks = blocks.map((block) => {
                         if (
-                          block.type === 'tool' &&
+                          block.type === "tool" &&
                           block.toolCall.id === localId
                         ) {
                           return {
                             ...block,
                             toolCall: {
                               ...block.toolCall,
-                              status: isError ? 'error' : 'success',
+                              status: isError ? "error" : "success",
                               result: data.result,
                               duration,
                               errorMessage: isError
                                 ? classifyToolError(
-                                    data.result?.error || data.result
+                                    data.result?.error || data.result,
                                   )
                                 : undefined,
                             },
@@ -400,9 +404,13 @@ export function useChatStream(): UseChatStreamReturn {
                       setMessages((prev) =>
                         prev.map((m) =>
                           m.id === assistantMessageId
-                            ? { ...m, blocks: [...blocks], reasoning: fullReasoning }
-                            : m
-                        )
+                            ? {
+                                ...m,
+                                blocks: [...blocks],
+                                reasoning: fullReasoning,
+                              }
+                            : m,
+                        ),
                       );
 
                       pendingToolCalls.delete(apiToolId);
@@ -410,15 +418,19 @@ export function useChatStream(): UseChatStreamReturn {
                   }
                   break;
 
-                case 'title_update':
+                case "title_update":
                   // Title was auto-generated by AI after first exchange
                   if (data.title) {
                     setGeneratedTitle(data.title);
                     // Update the chat title in query cache
                     queryClient.setQueryData(
-                      ['chats', 'list'],
+                      ["chats", "list"],
                       (old: unknown) => {
-                        if (!old || typeof old !== 'object' || !('chats' in old))
+                        if (
+                          !old ||
+                          typeof old !== "object" ||
+                          !("chats" in old)
+                        )
                           return old;
                         const oldData = old as {
                           chats: Array<{ id: string; title: string }>;
@@ -428,18 +440,18 @@ export function useChatStream(): UseChatStreamReturn {
                           chats: oldData.chats.map((chat) =>
                             chat.id === chatId
                               ? { ...chat, title: data.title }
-                              : chat
+                              : chat,
                           ),
                         };
-                      }
+                      },
                     );
                     // Call the callback if provided
                     callbacks?.onTitleUpdate?.(data.title);
                   }
                   break;
 
-                case 'error':
-                  throw new Error(data.message || 'Stream error');
+                case "error":
+                  throw new Error(data.message || "Stream error");
               }
             } catch {
               // Skip parse errors
@@ -456,7 +468,7 @@ export function useChatStream(): UseChatStreamReturn {
               blocks: blocks.length > 0 ? blocks : undefined,
               reasoning: fullReasoning || undefined,
             };
-          })
+          }),
         );
 
         // Persist blocks to backend
@@ -464,17 +476,17 @@ export function useChatStream(): UseChatStreamReturn {
           try {
             await chatApi.updateMessageBlocks(assistantMessageId, blocks);
           } catch (err) {
-            console.warn('[useChatStream] Failed to persist blocks:', err);
+            console.warn("[useChatStream] Failed to persist blocks:", err);
           }
         }
 
         return { chatId, chatTitle };
       } catch (error) {
-        console.error('[useChatStream] Error:', error);
+        console.error("[useChatStream] Error:", error);
 
         // Don't show error for user-initiated abort
         if (isAbortError(error)) {
-          console.log('[useChatStream] Stream aborted by user, not an error');
+          console.log("[useChatStream] Stream aborted by user, not an error");
           // Clean up: remove empty placeholder or keep accumulated content
           setMessages((prev) =>
             prev.map((m) =>
@@ -484,8 +496,8 @@ export function useChatStream(): UseChatStreamReturn {
                     // Keep accumulated blocks, clean up reasoning if empty
                     reasoning: m.reasoning || undefined,
                   }
-                : m
-            )
+                : m,
+            ),
           );
         } else {
           // Only show error for actual errors (not aborts)
@@ -495,17 +507,15 @@ export function useChatStream(): UseChatStreamReturn {
 
               // Add error as text block
               const errorBlock: TextBlock = {
-                type: 'text',
-                content: `\n\n[Error: ${error instanceof Error ? error.message : 'Unknown error'}]`,
+                type: "text",
+                content: `\n\n[Error: ${error instanceof Error ? error.message : "Unknown error"}]`,
               };
 
               return {
                 ...m,
-                blocks: m.blocks
-                  ? [...m.blocks, errorBlock]
-                  : [errorBlock],
+                blocks: m.blocks ? [...m.blocks, errorBlock] : [errorBlock],
               };
-            })
+            }),
           );
         }
 
@@ -514,7 +524,7 @@ export function useChatStream(): UseChatStreamReturn {
         setIsStreaming(false);
       }
     },
-    [isStreaming]
+    [isStreaming],
   );
 
   return {

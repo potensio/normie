@@ -9,7 +9,12 @@ import { useAuth } from '@/contexts/AuthContext';
 import { ChatSidebar } from './ChatSidebar';
 import { SettingsModal } from '../SettingsModal';
 
-export function ChatSidebarContainer() {
+interface ChatSidebarContainerProps {
+  activeView: "chat" | "skills";
+  onViewChange: (view: "chat" | "skills") => void;
+}
+
+export function ChatSidebarContainer({ activeView, onViewChange }: ChatSidebarContainerProps) {
   const { chats, currentChat, loadChat, createNewChat, deleteChat, prefetchChat } = useChat();
   const { user, currentWorkspace, workspaces, switchWorkspace, createWorkspace } = useAuth();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -22,6 +27,8 @@ export function ChatSidebarContainer() {
         workspaces={workspaces}
         onSwitchWorkspace={switchWorkspace}
         onCreateWorkspace={createWorkspace}
+        activeView={activeView}
+        onViewChange={onViewChange}
         chats={chats}
         currentChatId={currentChat?.id ?? null}
         onLoadChat={loadChat}

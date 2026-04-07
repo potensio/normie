@@ -40,7 +40,14 @@ interface ChatInputProps {
 
   // Attachments
   attachments?: PendingAttachment[];
-  onAddFiles?: (files: Array<{ path: string; name: string; size: number; type: string; data: string }>) => Promise<void>;
+  onAddPaths?: (
+    paths: Array<{
+      path: string;
+      name: string;
+      isDirectory: boolean;
+      size: number;
+    }>,
+  ) => void;
   onRemoveAttachment?: (id: string) => void;
 }
 
@@ -58,7 +65,7 @@ export function ChatInput({
   isStreaming,
   isLoadingProviders = false,
   attachments = [],
-  onAddFiles,
+  onAddPaths,
   onRemoveAttachment,
 }: ChatInputProps) {
   const [message, setMessage] = useState("");
@@ -148,8 +155,8 @@ export function ChatInput({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <AttachmentButton
-              onSelectFiles={onAddFiles || (async () => {})}
-              disabled={!onAddFiles}
+              onSelectPaths={onAddPaths || (() => {})}
+              disabled={!onAddPaths}
               isStreaming={isStreaming}
             />
             <div className="h-5 w-px bg-zinc-200 mx-1" />

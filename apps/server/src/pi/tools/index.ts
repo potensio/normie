@@ -1,19 +1,138 @@
-import { codingTools, readOnlyTools, grepTool, findTool, lsTool } from '@mariozechner/pi-coding-agent';
-import type { AgentTool } from '@mariozechner/pi-agent-core';
-import type { TSchema } from '@sinclair/typebox';
+import {
+  codingTools,
+  readOnlyTools,
+  grepTool,
+  findTool,
+  lsTool,
+} from "@mariozechner/pi-coding-agent";
+import type { AgentTool } from "@mariozechner/pi-agent-core";
+import type { TSchema } from "@sinclair/typebox";
 import {
   buildComposioTools,
   getComposioClient,
   type ComposioToolConfig,
-} from './composio-tools.js';
-import { webSearchTool, webFetchTool } from './web-tools.js';
-import { createConnectToolkitTool } from './connect-toolkit-tool.js';
+} from "./composio-tools.js";
+import { webSearchTool, webFetchTool } from "./web-tools.js";
+import { createConnectToolkitTool } from "./connect-toolkit-tool.js";
+import path from "path";
+
+/**
+ * Binary file extensions that should not be read as text
+ */
+const BINARY_EXTENSIONS = new Set([
+  // Images
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".gif",
+  ".bmp",
+  ".ico",
+  ".webp",
+  ".svg",
+  ".tiff",
+  ".tif",
+  // Videos
+  ".mp4",
+  ".avi",
+  ".mov",
+  ".wmv",
+  ".flv",
+  ".mkv",
+  ".webm",
+  ".m4v",
+  // Audio
+  ".mp3",
+  ".wav",
+  ".ogg",
+  ".flac",
+  ".aac",
+  ".wma",
+  ".m4a",
+  // Archives
+  ".zip",
+  ".rar",
+  ".7z",
+  ".tar",
+  ".gz",
+  ".bz2",
+  ".xz",
+  // Executables
+  ".exe",
+  ".dll",
+  ".so",
+  ".dylib",
+  ".app",
+  // Documents (binary formats)
+  ".pdf",
+  ".doc",
+  ".docx",
+  ".xls",
+  ".xlsx",
+  ".ppt",
+  ".pptx",
+  // Fonts
+  ".ttf",
+  ".otf",
+  ".woff",
+  ".woff2",
+  ".eot",
+  // Other
+  ".bin",
+  ".dat",
+  ".db",
+  ".sqlite",
+  ".dmg",
+  ".iso",
+]);
+
+/**
+ * Wrap the read tool to reject binary files
+ */
+function wrapReadTool(originalReadTool: AgentTool): AgentTool {
+  return {
+    ...originalReadTool,
+    execute: async (toolCallId: string, args: any, signal?: AbortSignal) => {
+      const filePath = args.path || args.file_path || "";
+      const ext = path.extname(filePath).toLowerCase();
+
+      if (BINARY_EXTENSIONS.has(ext)) {
+        console.log(`[ReadTool] Rejected binary file: ${filePath}`);
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Cannot read binary file: ${filePath}\n\nThis appears to be a ${ext} file. Binary files cannot be read as text. If you need information about this file, you can:\n- Check the file path and name for context\n- Use other tools to analyze the file\n- Ask the user about the file's purpose`,
+            },
+          ],
+          details: {
+            error: true,
+            reason: "binary_file",
+            extension: ext,
+          },
+        };
+      }
+
+      // Not a binary file, proceed with original read tool
+      return originalReadTool.execute(toolCallId, args, signal);
+    },
+  };
+}
 
 // Re-export for external use
-export { buildComposioTools, getComposioClient, type ComposioToolConfig } from './composio-tools.js';
-export { webSearchTool, webFetchTool } from './web-tools.js';
-export { codingTools, readOnlyTools, grepTool, findTool, lsTool } from '@mariozechner/pi-coding-agent';
-export { createConnectToolkitTool } from './connect-toolkit-tool.js';
+export {
+  buildComposioTools,
+  getComposioClient,
+  type ComposioToolConfig,
+} from "./composio-tools.js";
+export { webSearchTool, webFetchTool } from "./web-tools.js";
+export {
+  codingTools,
+  readOnlyTools,
+  grepTool,
+  findTool,
+  lsTool,
+} from "@mariozechner/pi-coding-agent";
+export { createConnectToolkitTool } from "./connect-toolkit-tool.js";
 
 /**
  * Tool builder configuration options
@@ -100,15 +219,27 @@ export async function buildWorkspaceTools(
   // Add Pi's built-in coding tools
   if (includeCodingTools) {
     if (readOnlyMode) {
-      // Read-only mode: only include safe tools
-      tools.push(...readOnlyTools);
-      console.log('[ToolSystem] Added readOnlyTools:', readOnlyTools.map(t => t.name).join(', '));
+      // Read-only mode: only include safe tools (wrap read tool)
+      const wrappedReadOnlyTools = readOnlyTools.map((tool) =>
+        tool.name === "read" ? wrapReadTool(tool) : tool,
+      );
+      tools.push(...wrappedReadOnlyTools);
+      console.log(
+        "[ToolSystem] Added readOnlyTools:",
+        readOnlyTools.map((t) => t.name).join(", "),
+      );
     } else {
-      // Full mode: include all coding tools + additional read-only tools
-      tools.push(...codingTools);
+      // Full mode: include all coding tools + additional read-only tools (wrap read tool)
+      const wrappedCodingTools = codingTools.map((tool) =>
+        tool.name === "read" ? wrapReadTool(tool) : tool,
+      );
+      tools.push(...wrappedCodingTools);
       // Add grep, find, ls which are useful for code exploration
       tools.push(grepTool, findTool, lsTool);
-      console.log('[ToolSystem] Added codingTools + grep, find, ls:', [...codingTools.map(t => t.name), 'grep', 'find', 'ls'].join(', '));
+      console.log(
+        "[ToolSystem] Added codingTools + grep, find, ls:",
+        [...codingTools.map((t) => t.name), "grep", "find", "ls"].join(", "),
+      );
     }
   }
 
@@ -120,13 +251,17 @@ export async function buildWorkspaceTools(
   }
 
   // Add Composio tools for this workspace
-  if (includeComposioTools && composioConfig.workspaceId && composioConfig.userId) {
+  if (
+    includeComposioTools &&
+    composioConfig.workspaceId &&
+    composioConfig.userId
+  ) {
     try {
       const composioTools = await buildComposioTools(composioConfig);
       tools.push(...composioTools);
     } catch (error) {
       console.error(
-        '[ToolSystem] Error building Composio tools:',
+        "[ToolSystem] Error building Composio tools:",
         error instanceof Error ? error.message : String(error),
       );
       // Continue without Composio tools rather than failing
@@ -134,14 +269,19 @@ export async function buildWorkspaceTools(
   }
 
   // Add connect_toolkit meta-tool (always available for proactive connection suggestions)
-  if (includeConnectToolkit && composioConfig.workspaceId && composioConfig.userId && db) {
+  if (
+    includeConnectToolkit &&
+    composioConfig.workspaceId &&
+    composioConfig.userId &&
+    db
+  ) {
     const connectTool = createConnectToolkitTool({
       workspaceId: composioConfig.workspaceId,
       userId: composioConfig.userId,
       db: db as any,
     });
     tools.push(connectTool);
-    console.log('[ToolSystem] Added connect_toolkit meta-tool');
+    console.log("[ToolSystem] Added connect_toolkit meta-tool");
   }
 
   // Add any custom tools
@@ -150,7 +290,7 @@ export async function buildWorkspaceTools(
   }
 
   console.log(
-    `[ToolSystem] Built ${tools.length} tools for workspace ${composioConfig.workspaceId || 'N/A'}`,
+    `[ToolSystem] Built ${tools.length} tools for workspace ${composioConfig.workspaceId || "N/A"}`,
   );
 
   return tools;
@@ -163,7 +303,7 @@ export async function buildWorkspaceTools(
  * should be restricted.
  */
 export async function buildMinimalTools(
-  options: Omit<ToolBuilderOptions, 'includeCodingTools' | 'readOnlyMode'>,
+  options: Omit<ToolBuilderOptions, "includeCodingTools" | "readOnlyMode">,
 ): Promise<AgentTool[]> {
   return buildWorkspaceTools({
     ...options,
@@ -225,23 +365,27 @@ export function groupToolsByCategory(
   tools: AgentTool[],
 ): Record<string, AgentTool[]> {
   const groups: Record<string, AgentTool[]> = {
-    'Built-in': [],
-    'Web': [],
-    'Integrations': [],
+    "Built-in": [],
+    Web: [],
+    Integrations: [],
   };
 
   for (const tool of tools) {
     // Categorize by name patterns
-    if (['read', 'write', 'edit', 'bash', 'grep', 'find', 'ls'].includes(tool.name)) {
-      groups['Built-in'].push(tool);
-    } else if (tool.name.startsWith('web_')) {
-      groups['Web'].push(tool);
+    if (
+      ["read", "write", "edit", "bash", "grep", "find", "ls"].includes(
+        tool.name,
+      )
+    ) {
+      groups["Built-in"].push(tool);
+    } else if (tool.name.startsWith("web_")) {
+      groups["Web"].push(tool);
     } else {
       // Default to Integrations category for Composio tools
-      if (!groups['Integrations']) {
-        groups['Integrations'] = [];
+      if (!groups["Integrations"]) {
+        groups["Integrations"] = [];
       }
-      groups['Integrations'].push(tool);
+      groups["Integrations"].push(tool);
     }
   }
 

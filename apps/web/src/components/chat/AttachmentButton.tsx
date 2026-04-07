@@ -1,68 +1,59 @@
 /**
- * AttachmentButton - Button that triggers file picker dialog
+ * AttachmentButton - Button that triggers file/folder picker dialog
+ *
+ * Simplified - no file reading, just path selection.
  */
 
-import { Paperclip, Loader2 } from 'lucide-react';
-import { useState, useCallback } from 'react';
+import { Paperclip } from "lucide-react";
+import { useCallback } from "react";
 
 interface AttachmentButtonProps {
-  onSelectFiles: (files: Array<{ path: string; name: string; size: number; type: string; data: string }>) => Promise<void>;
+  onSelectPaths: (
+    paths: Array<{
+      path: string;
+      name: string;
+      isDirectory: boolean;
+      size: number;
+    }>,
+  ) => void;
   disabled?: boolean;
   isStreaming: boolean;
 }
 
-export function AttachmentButton({ onSelectFiles, disabled, isStreaming }: AttachmentButtonProps) {
-  const [isLoading, setIsLoading] = useState(false);
-
+export function AttachmentButton({
+  onSelectPaths,
+  disabled,
+  isStreaming,
+}: AttachmentButtonProps) {
   const handleClick = useCallback(async () => {
-    if (isStreaming || disabled || isLoading) return;
+    if (isStreaming || disabled) return;
 
-    setIsLoading(true);
     try {
-      // Call Electron API to open file picker
-      const result = await window.electronAPI?.selectFiles();
-      
-      if (!result?.success || !result.files?.length) {
+      // Call Electron API to open path picker (files or folders)
+      const result = await window.electronAPI?.selectPaths();
+
+      if (!result?.success || !result.paths?.length) {
         return;
       }
 
-      // Read each file as data URL
-      const filesWithData = await Promise.all(
-        result.files.map(async (file) => {
-          const data = await window.electronAPI?.readFileAsDataUrl(file.path);
-          return {
-            path: file.path,
-            name: file.name,
-            size: file.size,
-            type: file.type,
-            data: data || '',
-          };
-        })
-      );
-
-      await onSelectFiles(filesWithData);
+      // No file reading! Just pass paths directly
+      onSelectPaths(result.paths);
     } catch (error) {
-      console.error('[AttachmentButton] Error selecting files:', error);
-    } finally {
-      setIsLoading(false);
+      console.error("[AttachmentButton] Error selecting paths:", error);
     }
-  }, [isStreaming, disabled, isLoading, onSelectFiles]);
+  }, [isStreaming, disabled, onSelectPaths]);
 
-  const isDisabled = isStreaming || disabled || isLoading;
+  const isDisabled = isStreaming || disabled;
 
   return (
     <button
       type="button"
       onClick={handleClick}
       disabled={isDisabled}
-      title="Attach files"
+      title="Attach files or folders"
       className="w-8 h-8 rounded-full bg-white border border-zinc-200 flex items-center justify-center hover:bg-zinc-50 transition-colors text-zinc-500 hover:text-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed"
     >
-      {isLoading ? (
-        <Loader2 className="w-4 h-4 animate-spin" strokeWidth={1.5} />
-      ) : (
-        <Paperclip className="w-4 h-4" strokeWidth={1.5} />
-      )}
+      <Paperclip className="w-4 h-4" strokeWidth={1.5} />
     </button>
   );
 }
