@@ -5,7 +5,23 @@
  * Used with ModelRegistry.registerProvider() to register custom Bedrock provider.
  */
 
-export const BEDROCK_MODELS = [
+type BedrockModel = {
+  id: string;
+  name: string;
+  api: "openai-completions";
+  reasoning: boolean;
+  input: ("text" | "image")[];
+  cost: {
+    input: number;
+    output: number;
+    cacheRead: number;
+    cacheWrite: number;
+  };
+  contextWindow: number;
+  maxTokens: number;
+};
+
+export const BEDROCK_MODELS: BedrockModel[] = [
   {
     id: "zai.glm-5",
     name: "GLM-5",
