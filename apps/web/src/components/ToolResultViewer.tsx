@@ -5,19 +5,59 @@
  * - Syntax highlighting for JSON
  * - Max height with scroll
  * - Plain text fallback for non-JSON
+ * - Special rendering for connection and error results
  */
 import { useState, useEffect } from "react";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
+import type { ConnectionToolResult, ComposioToolError } from "@normie/types";
+
+type ToolResultWithOptionalError = {
+  type?: string;
+  toolkitSlug?: string;
+  toolkitName?: string;
+  authUrl?: string;
+  retryAfter?: number;
+  message?: string;
+  details?: Record<string, unknown>;
+};
 
 interface ToolResultViewerProps {
   result: unknown;
   maxHeight?: number;
+  toolName?: string;
+}
+
+/**
+ * Check if result is a connection result
+ */
+function isConnectionResult(result: unknown): result is ConnectionToolResult {
+  return (
+    typeof result === 'object' &&
+    result !== null &&
+    'type' in result &&
+    'toolkitSlug' in result &&
+    'authUrl' in result
+  );
+}
+
+/**
+ * Check if result is an error result
+ */
+function isErrorResult(result: unknown): result is ComposioToolError {
+  return (
+    typeof result === 'object' &&
+    result !== null &&
+    'type' in result &&
+    'toolkitSlug' in result &&
+    ('retryAfter' in result || 'details' in result || !('authUrl' in result))
+  );
 }
 
 export function ToolResultViewer({
   result,
   maxHeight = 200,
+  toolName,
 }: ToolResultViewerProps) {
   const [formattedResult, setFormattedResult] = useState<string>("");
   const [isJSON, setIsJSON] = useState(false);

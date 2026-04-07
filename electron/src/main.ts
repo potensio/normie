@@ -1,7 +1,8 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, shell, dialog } from 'electron';
 import path from 'path';
 import { spawn, ChildProcess } from 'child_process';
 import fs from 'fs';
+import crypto from 'crypto';
 
 // Store the backend server process
 let backendProcess: ChildProcess | null = null;
@@ -149,6 +150,69 @@ function stopBackend(): void {
   }
 }
 
+// ============================================
+// FILE ATTACHMENT HELPERS
+// ============================================
+
+/**
+ * Get attachments directory path
+ */
+function getAttachmentsDir(): string {
+  return path.join(app.getPath('userData'), 'attachments');
+}
+
+/**
+ * Ensure chat attachments directory exists
+ */
+function ensureAttachmentsDir(chatId: string): string {
+  const dir = path.join(getAttachmentsDir(), chatId);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  return dir;
+}
+
+/**
+ * Get MIME type from file extension
+ */
+function getMimeType(ext: string): string {
+  const mimeTypes: Record<string, string> = {
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.gif': 'image/gif',
+    '.webp': 'image/webp',
+    '.bmp': 'image/bmp',
+    '.pdf': 'application/pdf',
+    '.txt': 'text/plain',
+    '.md': 'text/markdown',
+    '.json': 'application/json',
+    '.csv': 'text/csv',
+    '.xml': 'application/xml',
+    '.ts': 'text/typescript',
+    '.tsx': 'text/typescript-jsx',
+    '.js': 'text/javascript',
+    '.jsx': 'text/javascript-jsx',
+    '.py': 'text/x-python',
+    '.go': 'text/x-go',
+    '.rs': 'text/x-rust',
+    '.java': 'text/x-java',
+    '.c': 'text/x-c',
+    '.cpp': 'text/x-cpp',
+    '.h': 'text/x-header',
+  };
+  return mimeTypes[ext.toLowerCase()] || 'application/octet-stream';
+}
+
+/**
+ * Generate a unique filename
+ */
+function generateUniqueFilename(originalName: string): string {
+  const ext = path.extname(originalName);
+  const uuid = crypto.randomUUID();
+  return `${uuid}${ext}`;
+}
+
 // App event handlers
 app.whenReady().then(async () => {
   // Start backend server
@@ -165,6 +229,147 @@ app.whenReady().then(async () => {
     } catch (error) {
       safeLog('[Main]', `Failed to open external URL: ${error}`);
       return { success: false, error: String(error) };
+    }
+  });
+
+  // ============================================
+  // FILE ATTACHMENT IPC HANDLERS
+  // ============================================
+
+  // Select files via native file picker
+  ipcMain.handle('select-files', async () => {
+    try {
+      const result = await dialog.showOpenDialog({
+        properties: ['multiSelections', 'openFile'],
+        filters: [
+          { name: 'All Files', extensions: ['*'] }
+        ]
+      });
+
+      if (result.canceled || result.filePaths.length === 0) {
+        return { success: false, files: [] };
+      }
+
+      const files = result.filePaths.map(filePath => {
+        const stats = fs.statSync(filePath);
+        const ext = path.extname(filePath);
+        return {
+          path: filePath,
+          name: path.basename(filePath),
+          size: stats.size,
+          type: getMimeType(ext)
+        };
+      });
+
+      return { success: true, files };
+    } catch (error) {
+      safeLog('[Main]', `Failed to select files: ${error}`);
+      return { success: false, error: String(error) };
+    }
+  });
+
+  // Read file as data URL (for previews)
+  ipcMain.handle('read-file-data-url', async (_event, filePath: string) => {
+    try {
+      const buffer = fs.readFileSync(filePath);
+      const ext = path.extname(filePath);
+      const mimeType = getMimeType(ext);
+      const base64 = buffer.toString('base64');
+      return `data:${mimeType};base64,${base64}`;
+    } catch (error) {
+      safeLog('[Main]', `Failed to read file: ${error}`);
+      throw error;
+    }
+  });
+
+  // Save attachments to disk
+  ipcMain.handle('save-attachments', async (_event, chatId: string, files: Array<{ data: string; name: string; type: string; size: number }>) => {
+    try {
+      const attachmentsDir = ensureAttachmentsDir(chatId);
+      const savedAttachments: Array<{
+        filename: string;
+        originalName: string;
+        mimeType: string;
+        size: number;
+        storagePath: string;
+      }> = [];
+
+      for (const file of files) {
+        // Generate unique filename
+        const filename = generateUniqueFilename(file.name);
+        const filePath = path.join(attachmentsDir, filename);
+
+        // Extract base64 data from data URL
+        const matches = file.data.match(/^data:([^;]+);base64,(.+)$/);
+        if (!matches) {
+          safeLog('[Main]', `Invalid data URL for file: ${file.name}`);
+          continue;
+        }
+
+        const mimeType = matches[1];
+        const base64Data = matches[2];
+        const buffer = Buffer.from(base64Data, 'base64');
+
+        // Write file
+        fs.writeFileSync(filePath, buffer);
+
+        // Create storage path (relative to attachments dir)
+        const storagePath = path.join(chatId, filename);
+
+        savedAttachments.push({
+          filename,
+          originalName: file.name,
+          mimeType,
+          size: file.size,
+          storagePath
+        });
+      }
+
+      return { success: true, attachments: savedAttachments };
+    } catch (error) {
+      safeLog('[Main]', `Failed to save attachments: ${error}`);
+      return { success: false, error: String(error) };
+    }
+  });
+
+  // Read attachment from disk
+  ipcMain.handle('read-attachment', async (_event, storagePath: string) => {
+    try {
+      const fullPath = path.join(getAttachmentsDir(), storagePath);
+      const buffer = fs.readFileSync(fullPath);
+      const ext = path.extname(fullPath);
+      const mimeType = getMimeType(ext);
+      const base64 = buffer.toString('base64');
+      return {
+        data: `data:${mimeType};base64,${base64}`,
+        mimeType
+      };
+    } catch (error) {
+      safeLog('[Main]', `Failed to read attachment: ${error}`);
+      throw error;
+    }
+  });
+
+  // Delete all attachments for a chat
+  ipcMain.handle('delete-chat-attachments', async (_event, chatId: string) => {
+    try {
+      const chatDir = path.join(getAttachmentsDir(), chatId);
+      if (fs.existsSync(chatDir)) {
+        fs.rmSync(chatDir, { recursive: true, force: true });
+      }
+    } catch (error) {
+      safeLog('[Main]', `Failed to delete chat attachments: ${error}`);
+      // Don't throw - best effort cleanup
+    }
+  });
+
+  // Open attachment with system default app
+  ipcMain.handle('open-attachment', async (_event, storagePath: string) => {
+    try {
+      const fullPath = path.join(getAttachmentsDir(), storagePath);
+      await shell.openPath(fullPath);
+    } catch (error) {
+      safeLog('[Main]', `Failed to open attachment: ${error}`);
     }
   });
 

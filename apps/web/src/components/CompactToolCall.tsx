@@ -5,21 +5,36 @@
  * - 1-2 line display with status, action, target
  * - Click to expand/collapse result
  * - Duration shown on completion
+ * - Special rendering for connection actions
  */
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Loader2, CheckCircle, XCircle, ChevronRight } from "lucide-react";
-import type { InlineToolCall } from "@normie/types";
+import type { InlineToolCall, ConnectionToolResult } from "@normie/types";
 import {
   getToolLabel,
   getToolTarget,
   truncateTarget,
 } from "@/lib/tool-labels";
 import { ToolResultViewer } from "./ToolResultViewer";
+import { ConnectionPrompt } from "./chat/ConnectionPrompt";
 
 interface CompactToolCallProps {
   toolCall: InlineToolCall;
   isStreaming: boolean;
+}
+
+/**
+ * Check if result is a connection action result
+ */
+function isConnectionResult(result: unknown): result is ConnectionToolResult {
+  return (
+    typeof result === 'object' &&
+    result !== null &&
+    'type' in result &&
+    'toolkitSlug' in result &&
+    'authUrl' in result
+  );
 }
 
 export function CompactToolCall({
@@ -62,6 +77,23 @@ export function CompactToolCall({
   const config = statusConfig[status];
   const hasResult = result !== undefined;
   const showError = status === "error" && errorMessage;
+
+  // Check if this is a connection result that needs special rendering
+  const isConnection = name === 'connect_toolkit' && hasResult && isConnectionResult(result);
+
+  // For connection actions, render the ConnectionPrompt directly
+  if (isConnection && isConnectionResult(result)) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 4 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
+        className="py-2"
+      >
+        <ConnectionPrompt data={result} />
+      </motion.div>
+    );
+  }
 
   return (
     <motion.div

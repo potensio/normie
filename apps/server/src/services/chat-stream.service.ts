@@ -37,6 +37,13 @@ export interface StreamParams {
   model: string;
   workspaceId: string;
   userId: string;
+  attachments?: Array<{
+    filename: string;
+    originalName: string;
+    mimeType: string;
+    size: number;
+    storagePath: string;
+  }>;
 }
 
 export interface StreamContext {
@@ -212,17 +219,30 @@ export async function buildStreamContext(
   db: DbClient,
   workspaceId: string,
   chatId: string,
-  message: string
+  message: string,
+  options?: { model?: string; attachments?: StreamParams['attachments'] }
 ): Promise<{
   systemPrompt: string | null;
-  messages: Array<{ role: string; content: string }>;
+  messages: Array<{ 
+    role: string; 
+    content: string | Array<{ 
+      type: 'text' | 'image'; 
+      text?: string;
+      data?: string;
+      mimeType?: string;
+    }> 
+  }>;
 }> {
   const contextResult = await buildFullContext(
     workspaceId,
     chatId,
     message,
     db,
-    { maxMessages: 20 }
+    { 
+      maxMessages: 20,
+      model: options?.model,
+      pendingAttachments: options?.attachments
+    }
   );
 
   console.log('[STREAM] Built context:', {
@@ -246,10 +266,20 @@ export async function buildStreamContext(
 export async function saveUserMessage(
   db: DbClient,
   chatId: string,
-  content: string
-): Promise<void> {
-  await addUserMessage(db, chatId, content);
-  console.log('[STREAM] Saved user message');
+  content: string,
+  attachments?: StreamParams['attachments']
+): Promise<string> {
+  const message = await addUserMessage(db, chatId, content);
+  console.log('[STREAM] Saved user message:', message.id);
+  
+  // Save attachment metadata if provided
+  if (attachments && attachments.length > 0) {
+    const { saveAttachmentsMetadata } = await import('./file.service.js');
+    await saveAttachmentsMetadata(db, message.id, attachments);
+    console.log('[STREAM] Saved', attachments.length, 'attachment(s)');
+  }
+  
+  return message.id;
 }
 
 /**
@@ -332,13 +362,14 @@ export async function streamChat(
   res: Response,
   signal?: AbortSignal
 ): Promise<void> {
-  const { chatId, message, provider, model, workspaceId, userId } = params;
+  const { chatId, message, provider, model, workspaceId, userId, attachments } = params;
 
   console.log('='.repeat(60));
   console.log('[STREAM] Starting stream');
   console.log(`[STREAM] Chat: ${chatId}`);
   console.log(`[STREAM] Provider: ${provider}`);
   console.log(`[STREAM] Model: ${model}`);
+  console.log(`[STREAM] Attachments: ${attachments?.length || 0}`);
   console.log('='.repeat(60));
 
   // 1. Setup SSE
@@ -355,6 +386,11 @@ export async function streamChat(
 
   let assistantResponse = '';
   let sessionId: string | undefined;
+  let usedToolkits: string[] = [];
+
+  // Register session with tracker
+  const { getActiveSessionTracker } = await import('./active-session-tracker.service.js');
+  const sessionTracker = getActiveSessionTracker();
 
   try {
     // 2. Get or create chat
@@ -383,14 +419,15 @@ export async function streamChat(
     }
 
     // 4. Save user message
-    await saveUserMessage(db, chatId, message);
+    await saveUserMessage(db, chatId, message, attachments);
 
     // 5. Build context
     const { systemPrompt, messages } = await buildStreamContext(
       db,
       context.workspaceId,
       chatId,
-      message
+      message,
+      { model, attachments }
     );
 
     // 6. Get Composio client
@@ -414,7 +451,8 @@ export async function streamChat(
       composioClient,
       signal: effectiveSignal,
       sessionId: context.chat.sessionFilePath || undefined,
-      credentials
+      credentials,
+      db
     })) {
       // Send to client
       sendSSEEvent(res, chunk);
@@ -424,10 +462,23 @@ export async function streamChat(
         sessionId = chunk.session_id;
       }
 
+      // Track toolkits in use
+      if (chunk.type === 'tool_use' && 'input' in chunk) {
+        const input = chunk.input as { toolkitSlug?: string };
+        if (input?.toolkitSlug && !usedToolkits.includes(input.toolkitSlug)) {
+          usedToolkits.push(input.toolkitSlug);
+        }
+      }
+
       // Accumulate response
       if (chunk.type === 'text' && !chunk.isReasoning) {
         assistantResponse += chunk.content || '';
       }
+    }
+
+    // Register toolkits used in this session
+    if (usedToolkits.length > 0) {
+      sessionTracker.registerSession(chatId, context.workspaceId, userId, usedToolkits);
     }
 
     // 8. Save assistant response
@@ -460,6 +511,9 @@ export async function streamChat(
       }
     }
 
+    // Unregister session
+    sessionTracker.unregisterSession(chatId);
+
     stopHeartbeat(heartbeat);
     if (!res.writableEnded) {
       res.end();
@@ -468,6 +522,9 @@ export async function streamChat(
     console.log('[STREAM] Completed');
 
   } catch (error) {
+    // Unregister session on error too
+    sessionTracker.unregisterSession(chatId);
+
     stopHeartbeat(heartbeat);
     console.error('[STREAM] Error:', error);
 

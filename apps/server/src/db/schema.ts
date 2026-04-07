@@ -167,6 +167,22 @@ export const messages = pgTable('messages', {
 ]);
 
 // ============================================
+// MESSAGE ATTACHMENTS
+// ============================================
+export const messageAttachments = pgTable('message_attachments', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  messageId: uuid('message_id').notNull().references(() => messages.id, { onDelete: 'cascade' }),
+  filename: varchar('filename', { length: 255 }).notNull(), // Generated unique filename
+  originalName: varchar('original_name', { length: 255 }).notNull(), // User's original filename
+  mimeType: varchar('mime_type', { length: 100 }).notNull(),
+  size: integer('size').notNull(), // Size in bytes
+  storagePath: text('storage_path').notNull(), // Relative path from attachments dir
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull()
+}, (table) => [
+  index('idx_message_attachments_message').on(table.messageId)
+]);
+
+// ============================================
 // MEMORIES
 // ============================================
 export const memories = pgTable('memories', {
@@ -335,10 +351,18 @@ export const chatsRelations = relations(chats, ({ many, one }) => ({
   messages: many(messages)
 }));
 
-export const messagesRelations = relations(messages, ({ one }) => ({
+export const messagesRelations = relations(messages, ({ one, many }) => ({
   chat: one(chats, {
     fields: [messages.chatId],
     references: [chats.id]
+  }),
+  attachments: many(messageAttachments)
+}));
+
+export const messageAttachmentsRelations = relations(messageAttachments, ({ one }) => ({
+  message: one(messages, {
+    fields: [messageAttachments.messageId],
+    references: [messages.id]
   })
 }));
 

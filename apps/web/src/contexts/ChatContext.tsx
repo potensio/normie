@@ -28,7 +28,13 @@ interface ChatContextType {
   createNewChat: () => void;
   loadChat: (chatId: string) => void;
   deleteChat: (chatId: string) => Promise<void>;
-  sendMessage: (content: string) => Promise<void>;
+  sendMessage: (content: string, attachments?: Array<{
+    filename: string;
+    originalName: string;
+    mimeType: string;
+    size: number;
+    storagePath: string;
+  }>) => Promise<void>;
   stopStreaming: () => void;
   setProvider: (provider: Provider) => void;
   setModel: (model: string) => void;
@@ -136,8 +142,14 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     [deleteChatAction, currentChatId, navigateToNewChat]
   );
 
-  const sendMessage = useCallback(async (content: string) => {
-    await sendChatMessage(content);
+  const sendMessage = useCallback(async (content: string, attachments?: Array<{
+    filename: string;
+    originalName: string;
+    mimeType: string;
+    size: number;
+    storagePath: string;
+  }>) => {
+    await sendChatMessage(content, attachments);
   }, [sendChatMessage]);
 
   // Stop streaming wrapper

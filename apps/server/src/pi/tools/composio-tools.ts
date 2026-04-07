@@ -1,9 +1,18 @@
+/**
+ * Composio Tools Builder
+ *
+ * Builds AgentTools from Composio actions for workspace integrations.
+ * Integrates status checking and error handling.
+ */
+
 import { Composio } from '@composio/core';
 import { Type } from '@sinclair/typebox';
 import type { AgentTool, AgentToolResult } from '@mariozechner/pi-agent-core';
 import { eq } from 'drizzle-orm';
 import { getDb } from '../../db/index.js';
 import * as schema from '../../db/schema.js';
+import { getToolkitMapping } from '../../services/toolkit-keywords.js';
+import { classifyComposioError } from './composio-errors.js';
 
 /**
  * Configuration for building Composio tools for a workspace
@@ -11,7 +20,9 @@ import * as schema from '../../db/schema.js';
 export interface ComposioToolConfig {
   workspaceId: string;
   userId: string;
-  composioClient: Composio;
+  composioClient?: Composio;
+  /** Database client for status checks */
+  db?: unknown;
 }
 
 /**
@@ -36,11 +47,18 @@ interface ComposioAction {
 /**
  * Build Composio tools for a specific workspace.
  * Maintains workspace isolation via entity IDs: ws_{workspaceId}_user_{userId}
+ *
+ * Only builds tools for ACTIVE integrations.
  */
 export async function buildComposioTools(
   config: ComposioToolConfig,
 ): Promise<AgentTool[]> {
   const { workspaceId, userId, composioClient } = config;
+
+  if (!composioClient) {
+    console.log('[ComposioTools] No Composio client provided, skipping tools');
+    return [];
+  }
 
   // Create workspace-specific entity ID for isolation
   const entityId = `ws_${workspaceId}_user_${userId}`;
@@ -56,6 +74,14 @@ export async function buildComposioTools(
   const tools: AgentTool[] = [];
 
   for (const integration of integrations) {
+    // Skip non-ACTIVE integrations
+    if (integration.connectionStatus !== 'ACTIVE') {
+      console.log(
+        `[ComposioTools] Skipping ${integration.toolkitSlug} - status: ${integration.connectionStatus}`,
+      );
+      continue;
+    }
+
     try {
       // Get available actions for this integration
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -72,6 +98,7 @@ export async function buildComposioTools(
           action,
           entityId,
           integration.connectedAccountId,
+          integration.toolkitSlug,
           composioClient,
         );
         tools.push(tool);
@@ -99,10 +126,14 @@ function createComposioTool(
   action: ComposioAction,
   entityId: string,
   connectedAccountId: string,
+  toolkitSlug: string,
   composioClient: Composio,
 ): AgentTool {
   // Convert Composio schema to TypeBox
   const parameters = convertComposioSchemaToTypeBox(action.parameters);
+
+  const toolkitMapping = getToolkitMapping(toolkitSlug);
+  const toolkitName = toolkitMapping?.toolkitName || toolkitSlug;
 
   return {
     name: action.name,
@@ -169,20 +200,21 @@ function createComposioTool(
         return toolResult;
       } catch (error) {
         const executionTime = Date.now() - startTime;
-        const errorMessage =
-          error instanceof Error ? error.message : String(error);
 
         console.error(
           `[ComposioTools] Error executing ${action.name}:`,
-          errorMessage,
+          error,
         );
+
+        // Classify the error
+        const classified = classifyComposioError(error, toolkitSlug);
 
         // Return error as tool result (LLM can see and handle)
         return {
           content: [
             {
               type: 'text',
-              text: `Error executing ${action.name}: ${errorMessage}\n\nThe action failed. Please check the parameters and try again.`,
+              text: `${classified.message}\n\nAction: ${action.name}\nToolkit: ${toolkitName}`,
             },
           ],
           details: {
@@ -191,8 +223,11 @@ function createComposioTool(
             connectedAccountId,
             executionTime,
             success: false,
-            error: errorMessage,
-            errorType: error instanceof Error ? error.constructor.name : 'Unknown',
+            error: classified.message,
+            errorType: classified.type,
+            toolkitSlug,
+            toolkitName,
+            isError: true,
           },
         };
       }
@@ -218,16 +253,9 @@ function convertComposioSchemaToTypeBox(composioSchema: any): any {
 
     switch (propSchema.type) {
       case 'string':
-        if (propSchema.enum && propSchema.enum.length > 0) {
-          // Enum field
-          typeBoxProps[key] = Type.String({
-            description: propSchema.description,
-          });
-        } else {
-          typeBoxProps[key] = Type.String({
-            description: propSchema.description,
-          });
-        }
+        typeBoxProps[key] = Type.String({
+          description: propSchema.description,
+        });
         break;
       case 'number':
       case 'integer':
@@ -284,4 +312,11 @@ export function getComposioClient(): Composio {
     composioClientInstance = new Composio();
   }
   return composioClientInstance;
+}
+
+/**
+ * Reset the Composio client singleton (for testing)
+ */
+export function resetComposioClient(): void {
+  composioClientInstance = null;
 }

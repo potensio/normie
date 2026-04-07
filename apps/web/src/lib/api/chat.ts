@@ -53,8 +53,15 @@ export const chatApi = {
     model: string;
     workspaceId: string | null;
     userId: string;
+    attachments?: Array<{
+      filename: string;
+      originalName: string;
+      mimeType: string;
+      size: number;
+      storagePath: string;
+    }>;
   }): Promise<{ read: () => Promise<{ done: boolean; value?: string }> }> => {
-    const { content, chatId, provider, model, workspaceId, userId } = params;
+    const { content, chatId, provider, model, workspaceId, userId, attachments } = params;
     
     if (!window.electronAPI) {
       throw new Error('Electron API not available');
@@ -66,7 +73,8 @@ export const chatApi = {
       provider,
       model,
       workspaceId,
-      userId
+      userId,
+      attachments
     );
 
     return response.getReader();

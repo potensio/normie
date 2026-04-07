@@ -7,18 +7,17 @@ import {
   MessageList,
 } from "@/components/chat";
 import { WorkspaceSidebar } from "@/components/WorkspaceSidebar";
-import { RightSidebar } from "@/components/RightSidebar";
+
 import { AuthPage } from "@/pages/AuthPage";
 import { SkillsPage } from "@/pages/SkillsPage";
-import { ChevronLeft, PanelRightOpen } from "lucide-react";
+
 
 type ViewType = "chat" | "skills" | "settings";
 
 function App() {
   const { isLoggedIn, isLoading: authLoading, user, workspaces, currentWorkspace, switchWorkspace, createWorkspace } = useAuth();
   const { currentChat, messages, isStreaming } = useChat();
-  const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
-  const [isChatSidebarOpen, setIsChatSidebarOpen] = useState(true);
+
   const [activeView, setActiveView] = useState<ViewType>("chat");
 
   // Random tagline for home view - must be before early returns (React hooks rule)
@@ -58,7 +57,6 @@ function App() {
   // Handle workspace switch
   const handleSwitchWorkspace = (id: string) => {
     switchWorkspace(id);
-    setActiveView("chat");
   };
 
   return (
@@ -73,7 +71,7 @@ function App() {
       />
 
       {/* Chat Sidebar - Conditional */}
-      {activeView === "chat" && isChatSidebarOpen && <ChatSidebarContainer />}
+      {activeView === "chat" && <ChatSidebarContainer />}
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
@@ -116,19 +114,7 @@ function App() {
                 <h1 className="text-sm font-medium text-text-primary tracking-tight">
                   {currentChat?.title || "New chat"}
                 </h1>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setIsRightSidebarOpen((prev) => !prev)}
-                    className="w-8 h-8 rounded-full bg-zinc-100 flex items-center justify-center hover:bg-zinc-200 transition-colors text-zinc-600"
-                    title={isRightSidebarOpen ? "Hide sidebar" : "Show sidebar"}
-                  >
-                    {isRightSidebarOpen ? (
-                      <ChevronLeft className="w-4 h-4" strokeWidth={1.5} />
-                    ) : (
-                      <PanelRightOpen className="w-4 h-4" strokeWidth={1.5} />
-                    )}
-                  </button>
-                </div>
+
               </div>
 
               {/* Messages */}
@@ -142,8 +128,7 @@ function App() {
               <ChatInputContainer variant="chat" />
             </div>
 
-            {/* Right Sidebar */}
-            {isRightSidebarOpen && <RightSidebar />}
+
           </div>
         )}
       </div>

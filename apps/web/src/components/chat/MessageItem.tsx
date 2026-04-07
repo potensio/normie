@@ -10,6 +10,7 @@ import type { Message, TextBlock } from "@normie/types";
 import { ThinkingBlock } from "../ThinkingBlock";
 import { MessageBlocks } from "../MessageBlocks";
 import { AnimatedStream } from "./AnimatedStream";
+import { AttachmentGrid } from "./AttachmentGrid";
 
 // Format relative time (e.g., "Just now", "2m ago", "1h ago")
 function formatRelativeTime(date: Date): string {
@@ -64,6 +65,13 @@ export const MessageItem = memo(function MessageItem({
         transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
         className="flex flex-col gap-0.5 items-end"
       >
+        {/* Attachments */}
+        {message.attachments && message.attachments.length > 0 && (
+          <div className="mb-1.5">
+            <AttachmentGrid attachments={message.attachments} />
+          </div>
+        )}
+        
         <div className="bg-gradient-to-br from-purple-500 to-purple-600 px-3.5 py-2 rounded-2xl max-w-2xl border border-purple-400/50 shadow-purple">
           <p className="text-sm font-normal text-white leading-relaxed">
             {textContent}

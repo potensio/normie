@@ -15,9 +15,13 @@ import {
   connectToolkit,
   getConnectionStatus,
   disconnectToolkit,
+  disconnectToolkitWithTracking,
   verifyIntegrationModifyAccess,
   type ConnectInput
 } from '../services/integration.service.js';
+import { getActiveSessionTracker } from '../services/active-session-tracker.service.js';
+
+type RequestWithSession = Request & { userId?: string; workspaceRole?: string | null };
 
 const router = Router();
 
@@ -85,9 +89,47 @@ router.delete('/:workspaceId/:toolkitSlug', requireWorkspaceAccess, asyncHandler
 
   const workspaceId = getStringParam(req.params.workspaceId);
   const toolkitSlug = getStringParam(req.params.toolkitSlug);
+  const force = req.query.force === 'true';
 
-  await disconnectToolkit(getDb(), workspaceId, toolkitSlug);
-  res.json({ success: true });
+  const sessionTracker = getActiveSessionTracker();
+
+  // Use enhanced disconnect with session tracking
+  const result = await disconnectToolkitWithTracking(
+    getDb(),
+    {
+      workspaceId,
+      toolkitSlug,
+      userId: (req as RequestWithSession).userId || '',
+      force,
+    },
+    sessionTracker
+  );
+
+  if (result.warning) {
+    // Active sessions exist and not forced
+    res.status(409).json({
+      success: false,
+      error: 'Active sessions using this toolkit',
+      warning: result.warning,
+      message: `This toolkit is in use by ${result.warning.activeSessionCount} active session(s). Use force=true to disconnect anyway.`,
+    });
+    return;
+  }
+
+  if (result.error) {
+    res.status(500).json({
+      success: false,
+      error: result.error,
+    });
+    return;
+  }
+
+  res.json({
+    success: true,
+    toolkitSlug,
+    composioDeleted: result.composioDeleted,
+    dbDeleted: result.dbDeleted,
+  });
 }));
 
 export default router;

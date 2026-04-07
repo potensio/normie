@@ -5,6 +5,8 @@ import { getContextMemories } from './memory-search.js';
 import { APPLICATION_PROMPT } from '../prompts/system.js';
 import { SkillService } from './skill-service.js';
 import { buildSkillsPrompt } from './skill-prompt-builder.js';
+import { getMessageAttachments, type SavedAttachment } from './file.service.js';
+import { processAttachment, isVisionModel, type ProcessedContent } from './file-processor.js';
 
 // Type for the database instance
 type DbType = DbClient;
@@ -14,6 +16,14 @@ type DbType = DbClient;
  */
 export interface ContextOptions {
   maxMessages?: number;
+  model?: string;
+  pendingAttachments?: Array<{
+    filename: string;
+    originalName: string;
+    mimeType: string;
+    size: number;
+    storagePath: string;
+  }>;
 }
 
 /**
@@ -21,7 +31,15 @@ export interface ContextOptions {
  */
 export interface FullContextResult {
   systemPrompt: string | null;
-  messages: Array<{ role: string; content: string }>;
+  messages: Array<{ 
+    role: string; 
+    content: string | Array<{ 
+      type: 'text' | 'image'; 
+      text?: string;
+      data?: string;
+      mimeType?: string;
+    }> 
+  }>;
   workspaceId: string | null;
 }
 
@@ -169,7 +187,7 @@ export async function buildFullContext(
   db: DbType,
   options: ContextOptions = {}
 ): Promise<FullContextResult> {
-  const { maxMessages = 20 } = options;
+  const { maxMessages = 20, model, pendingAttachments } = options;
   
   const result: FullContextResult = {
     systemPrompt: null,
@@ -197,12 +215,35 @@ export async function buildFullContext(
         .orderBy(schema.messages.createdAt)
         .limit(maxMessages);
 
+      // Load attachments for all messages in one query
+      const messageIds = chatMessages.map(m => m.id);
+      const { inArray } = await import('drizzle-orm');
+      const allAttachments: SavedAttachment[] = messageIds.length > 0 
+        ? await db.select()
+            .from(schema.messageAttachments)
+            .where(inArray(schema.messageAttachments.messageId, messageIds))
+        : [];
+      
+      // Group attachments by message ID
+      const attachmentsByMessage = new Map<string, SavedAttachment[]>();
+      for (const att of allAttachments) {
+        const existing = attachmentsByMessage.get(att.messageId) || [];
+        existing.push(att);
+        attachmentsByMessage.set(att.messageId, existing);
+      }
+
       // Convert to message format for AI
       for (const msg of chatMessages) {
-        result.messages.push({
-          role: msg.role,
-          content: msg.content
-        });
+        const msgAttachments = attachmentsByMessage.get(msg.id) || [];
+        
+        if (msgAttachments.length > 0 && model && isVisionModel(model)) {
+          // Process attachments for vision-capable models
+          const content = await buildMessageContent(msg.content, msgAttachments, model);
+          result.messages.push({ role: msg.role, content });
+        } else {
+          // Plain text for non-vision models or messages without attachments
+          result.messages.push({ role: msg.role, content: msg.content });
+        }
       }
 
       console.log('[CONTEXT] Loaded', result.messages.length, 'messages from history');
@@ -211,11 +252,68 @@ export async function buildFullContext(
     }
   }
 
-  // 4. Add current message
-  result.messages.push({
-    role: 'user',
-    content: currentMessage
-  });
+  // 4. Add current message with pending attachments
+  if (pendingAttachments && pendingAttachments.length > 0 && model && isVisionModel(model)) {
+    const content = await buildMessageContent(currentMessage, pendingAttachments as SavedAttachment[], model);
+    result.messages.push({ role: 'user', content });
+  } else if (pendingAttachments && pendingAttachments.length > 0) {
+    // Non-vision model - add text representation of attachments
+    const attachmentInfo = pendingAttachments.map(a => `[Attached: ${a.originalName}]`).join('\n');
+    result.messages.push({ role: 'user', content: `${attachmentInfo}\n\n${currentMessage}` });
+  } else {
+    result.messages.push({ role: 'user', content: currentMessage });
+  }
 
   return result;
+}
+
+/**
+ * Build message content array with text and images for vision models
+ */
+async function buildMessageContent(
+  text: string,
+  attachments: SavedAttachment[],
+  model: string
+): Promise<Array<{ type: 'text' | 'image'; text?: string; data?: string; mimeType?: string }>> {
+  const content: Array<{ type: 'text' | 'image'; text?: string; data?: string; mimeType?: string }> = [];
+  
+  // Get attachments directory (relative to app data)
+  const appDataPath = process.env.APP_DATA_PATH || process.cwd();
+  const attachmentsDir = appDataPath;
+  
+  // Process each attachment
+  for (const attachment of attachments) {
+    try {
+      const processed = await processAttachment(attachment, { model, attachmentsDir });
+      
+      for (const item of processed.contents) {
+        if (item.type === 'image' && item.source) {
+          content.push({
+            type: 'image',
+            data: item.source.data,
+            mimeType: item.source.media_type
+          });
+        } else if (item.type === 'text' && item.text) {
+          content.push({
+            type: 'text',
+            text: item.text
+          });
+        }
+      }
+    } catch (error) {
+      console.error('[CONTEXT] Error processing attachment:', error);
+      // Add fallback text
+      content.push({
+        type: 'text',
+        text: `[Attachment: ${attachment.originalName} - could not be processed]`
+      });
+    }
+  }
+  
+  // Add the text content at the end
+  if (text) {
+    content.push({ type: 'text', text });
+  }
+  
+  return content;
 }

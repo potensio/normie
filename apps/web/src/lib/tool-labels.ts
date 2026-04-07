@@ -46,6 +46,10 @@ const TOOL_LABELS: Record<string, ToolLabel> = {
 
   // Utility
   todo: { verb: "Updating todos", pastTense: "Updated todos" },
+
+  // Connection/Integration
+  connect_toolkit: { verb: "Initiating connection", pastTense: "Initiated connection" },
+  connect: { verb: "Connecting", pastTense: "Connected" },
 };
 
 /**

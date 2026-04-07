@@ -88,7 +88,7 @@ export async function getChatWithMessages(
   chatId: string
 ): Promise<{
   chat: typeof schema.chats.$inferSelect;
-  messages: typeof schema.messages.$inferSelect[];
+  messages: (typeof schema.messages.$inferSelect & { attachments?: typeof schema.messageAttachments.$inferSelect[] })[];
 }> {
   const chat = await getChatById(db, chatId);
 
@@ -96,6 +96,33 @@ export async function getChatWithMessages(
     .from(schema.messages)
     .where(eq(schema.messages.chatId, chat.id))
     .orderBy(schema.messages.createdAt);
+
+  // Load attachments for all messages
+  const { inArray } = await import('drizzle-orm');
+  const messageIds = messages.map(m => m.id);
+  
+  if (messageIds.length > 0) {
+    const attachments = await db.select()
+      .from(schema.messageAttachments)
+      .where(inArray(schema.messageAttachments.messageId, messageIds));
+
+    // Group attachments by message ID
+    const attachmentsByMessage = new Map<string, typeof schema.messageAttachments.$inferSelect[]>();
+    for (const att of attachments) {
+      const existing = attachmentsByMessage.get(att.messageId) || [];
+      existing.push(att);
+      attachmentsByMessage.set(att.messageId, existing);
+    }
+
+    // Attach to messages
+    return {
+      chat,
+      messages: messages.map(m => ({
+        ...m,
+        attachments: attachmentsByMessage.get(m.id) || []
+      }))
+    };
+  }
 
   return { chat, messages };
 }

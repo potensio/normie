@@ -10,6 +10,9 @@ import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { Composio } from '@composio/core';
 import * as schema from '../db/schema.js';
 import { NotFoundError, ValidationError, ForbiddenError } from '../middleware/index.js';
+import type { DisconnectOptions, DisconnectResult } from '../types/integration-responses.js';
+import type { ActiveSessionTracker } from './active-session-tracker.service.js';
+import { handleToolkitDisconnect } from '../pi/session-invalidation.js';
 
 // ============================================
 // Types
@@ -145,24 +148,12 @@ export async function connectToolkit(
   // Create workspace-specific entity ID for isolation
   const entityId = `ws_${workspaceId}_user_${userId}`;
   
-  // Get or create auth config for the toolkit
+  // Use the simpler toolkits.authorize method
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const authConfigs = await (composio.authConfigs as any).list({ toolkit: input.toolkitSlug });
-  
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const authConfigId = authConfigs.items?.[0]?.id;
-  
-  // Create connected account link with workspace-scoped entity
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const connection = await (composio.connectedAccounts as any).create({
-    auth_config: { id: authConfigId || '' },
-    connection: {
-      params: {
-        redirect_uri: input.redirectUrl || `${process.env.FRONTEND_URL || 'http://localhost:5173'}/integrations/callback`
-      }
-    },
-    user_id: entityId
-  });
+  const connection = await (composio.toolkits as any).authorize(
+    entityId,
+    input.toolkitSlug
+  );
 
   // Store integration in database
   await db.insert(schema.workspaceIntegrations)
@@ -188,7 +179,7 @@ export async function connectToolkit(
 
   return {
     connectedAccountId: connection.id,
-    redirectUrl: connection.redirect_url || connection.redirect_uri || null,
+    redirectUrl: connection.redirect_url || connection.redirect_uri || connection.url || null,
     status: connection.status
   };
 }
@@ -268,6 +259,81 @@ export async function disconnectToolkit(
   // Delete from database
   await db.delete(schema.workspaceIntegrations)
     .where(eq(schema.workspaceIntegrations.id, integration.id));
+}
+
+/**
+ * Disconnect a toolkit with session tracking.
+ *
+ * Enhanced version that:
+ * 1. Checks for active sessions
+ * 2. Returns warnings if sessions are active
+ * 3. Handles Composio and DB cleanup
+ */
+export async function disconnectToolkitWithTracking(
+  db: DbClient,
+  options: DisconnectOptions,
+  sessionTracker: ActiveSessionTracker
+): Promise<DisconnectResult> {
+  const { workspaceId, toolkitSlug, force = false } = options;
+
+  const integration = await getWorkspaceIntegration(db, workspaceId, toolkitSlug);
+
+  if (!integration) {
+    return {
+      dbDeleted: false,
+      composioDeleted: false,
+      error: 'Integration not found',
+    };
+  }
+
+  // Check for active sessions
+  const activeSessions = sessionTracker.getSessionsUsingToolkit(workspaceId, toolkitSlug);
+
+  const result: DisconnectResult = {
+    dbDeleted: false,
+    composioDeleted: false,
+  };
+
+  // If sessions active and not forcing, return warning
+  if (activeSessions.length > 0 && !force) {
+    result.warning = {
+      activeSessionCount: activeSessions.length,
+      sessionIds: activeSessions.map((s) => s.chatId),
+    };
+    return result;
+  }
+
+  // Invalidate toolkit for active sessions
+  handleToolkitDisconnect(workspaceId, toolkitSlug, sessionTracker);
+
+  // Delete from Composio
+  try {
+    const composio = getComposioClient();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (composio.connectedAccounts as any).delete(integration.connectedAccountId);
+    result.composioDeleted = true;
+  } catch (deleteError) {
+    console.error('[INTEGRATIONS] Composio delete error:', deleteError);
+    // Continue to delete from our DB even if Composio delete fails
+  }
+
+  // Delete from database
+  try {
+    await db.delete(schema.workspaceIntegrations)
+      .where(eq(schema.workspaceIntegrations.id, integration.id));
+    result.dbDeleted = true;
+  } catch (dbError) {
+    console.error('[INTEGRATIONS] DB delete error:', dbError);
+    result.error = 'Failed to delete from database';
+  }
+
+  console.log(
+    `[INTEGRATIONS] Disconnected ${toolkitSlug} from workspace ${workspaceId}`,
+    `- Composio: ${result.composioDeleted ? 'deleted' : 'failed'}`,
+    `- DB: ${result.dbDeleted ? 'deleted' : 'failed'}`
+  );
+
+  return result;
 }
 
 // ============================================

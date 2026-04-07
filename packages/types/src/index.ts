@@ -69,6 +69,7 @@ export interface Message {
   html?: string;
   toolCalls?: ToolCall[];
   reasoning?: string; // Thinking/reasoning content
+  attachments?: Attachment[]; // File attachments
 }
 
 // Inline tool call within a message
@@ -138,6 +139,42 @@ export interface Workspace {
   description?: string;
 }
 
+// Connection action types (for Composio integration)
+export type ConnectionActionType =
+  | 'connection_required'
+  | 'connection_expired'
+  | 'connection_initiated';
+
+export interface ConnectionToolResult {
+  type: ConnectionActionType;
+  toolkitSlug: string;
+  toolkitName: string;
+  authUrl: string;
+  connectedAccountId: string;
+  message: string;
+  suggestedActions?: string[];
+}
+
+// Composio error types
+export type ComposioErrorType =
+  | 'connection_required'
+  | 'connection_expired'
+  | 'rate_limited'
+  | 'service_unavailable'
+  | 'validation_error'
+  | 'permission_denied'
+  | 'unknown_error';
+
+export interface ComposioToolError {
+  type: ComposioErrorType;
+  toolkitSlug: string;
+  toolkitName: string;
+  message: string;
+  authUrl?: string;
+  retryAfter?: number;
+  details?: Record<string, unknown>;
+}
+
 // Stream chunk types
 // Used for SSE streaming from backend to frontend
 export type StreamChunk =
@@ -152,6 +189,7 @@ export type StreamChunk =
       provider: string;
     }
   | { type: "tool_result"; result: unknown; tool_use_id: string; provider: string }
+  | { type: "connection_action"; data: ConnectionToolResult }
   | { type: "done"; provider: string }
   | { type: "error"; message: string; provider?: string }
   | { type: "aborted"; provider: string }
@@ -183,12 +221,24 @@ export interface StreamChunkLegacy {
   title?: string;
 }
 
-// File attachment
+// File attachment (for upload - contains file data)
 export interface AttachedFile {
   name: string;
   type: string;
   size: number;
-  data: string;
+  data: string; // Base64 data URL
+}
+
+// Message attachment (stored in database)
+export interface Attachment {
+  id: string;
+  messageId?: string;
+  filename: string; // Generated unique filename
+  originalName: string; // User's original filename
+  mimeType: string;
+  size: number;
+  storagePath: string; // Relative path from attachments dir
+  createdAt?: string;
 }
 
 // Thinking mode

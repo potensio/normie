@@ -1,5 +1,7 @@
 // Type definitions for Electron API exposed via contextBridge
 
+import type { Attachment } from '@normie/types';
+
 export interface ElectronAPI {
   abortCurrentRequest: () => void;
   stopQuery: (chatId: string, provider?: string) => Promise<{ success: boolean; error?: string }>;
@@ -9,7 +11,14 @@ export interface ElectronAPI {
     provider?: string,
     model?: string | null,
     workspaceId?: string | null,
-    userId?: string | null
+    userId?: string | null,
+    attachments?: Array<{
+      filename: string;
+      originalName: string;
+      mimeType: string;
+      size: number;
+      storagePath: string;
+    }>
   ) => Promise<{
     getReader: () => Promise<{
       read: () => Promise<{ done: boolean; value?: string }>;
@@ -17,6 +26,39 @@ export interface ElectronAPI {
   }>;
   getProviders: () => Promise<{ providers: string[]; default: string }>;
   openExternal: (url: string) => Promise<void>;
+  
+  // File attachment APIs
+  selectFiles: () => Promise<SelectFilesResult>;
+  readFileAsDataUrl: (filePath: string) => Promise<string>;
+  saveAttachments: (chatId: string, files: Array<{ data: string; name: string; type: string; size: number }>) => Promise<SaveAttachmentsResult>;
+  readAttachment: (storagePath: string) => Promise<{ data: string; mimeType: string }>;
+  openAttachment: (storagePath: string) => Promise<void>;
+  deleteChatAttachments: (chatId: string) => Promise<void>;
+}
+
+// Result from file selection dialog
+export interface SelectFilesResult {
+  success: boolean;
+  files?: Array<{
+    path: string;
+    name: string;
+    size: number;
+    type: string;
+  }>;
+  error?: string;
+}
+
+// Result from saving attachments
+export interface SaveAttachmentsResult {
+  success: boolean;
+  attachments?: Array<{
+    filename: string;
+    originalName: string;
+    mimeType: string;
+    size: number;
+    storagePath: string;
+  }>;
+  error?: string;
 }
 
 export interface AuthAPI {

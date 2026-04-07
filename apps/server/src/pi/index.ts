@@ -1,9 +1,9 @@
 /**
  * Pi Agent Main Module
- * 
+ *
  * Provides the main entry point for creating Pi Agent sessions
  * and initializing the Pi Agent on server startup.
- * 
+ *
  * Credential Flow:
  * - Simple API key providers (Anthropic, OpenAI, etc): Injected via AuthStorage.inMemory()
  * - AWS Bedrock: Uses BEDROCK_API_KEY + BEDROCK_BASE_URL (OpenAI-compatible Mantle API)
@@ -16,7 +16,7 @@ import {
   type AgentSession,
   type AgentSessionEvent,
 } from "@mariozechner/pi-coding-agent";
-import { getModel, type Model } from "@mariozechner/pi-ai";
+import { getModel, type Model, type ImageContent } from "@mariozechner/pi-ai";
 import { loadPiConfig, validatePiConfig, getValidatedModel, PROVIDER_ALIAS } from "./config.js";
 import { NormieSessionManager } from "./session-manager.js";
 import { EventAdapter } from "./event-adapter.js";
@@ -24,6 +24,9 @@ import { buildWorkspaceTools, type ToolBuilderOptions } from "./tools/index.js";
 import type { ResolvedCredentials } from "./credentials.js";
 import type { StreamChunk } from '@normie/types';
 import { streamBedrockMantle, getBedrockMantleConfig, isBedrockMantleModel } from '../providers/bedrock-mantle-provider.js';
+import { getDb } from '../db/index.js';
+import { createConnectionStatusManager, type ConnectionStatusManager } from '../services/connection-status.service.js';
+import { getComposioClient } from './tools/composio-tools.js';
 
 export interface CreatePiSessionParams {
   workspaceId: string;
@@ -49,8 +52,16 @@ export interface RunPiQueryOptions {
   userId: string;
   /** System prompt from context builder */
   systemPrompt?: string;
-  /** Conversation history with current message */
-  messages: Array<{ role: string; content: string }>;
+  /** Conversation history with current message - supports multimodal */
+  messages: Array<{ 
+    role: string; 
+    content: string | Array<{ 
+      type: 'text' | 'image';
+      text?: string;
+      data?: string;  // base64 for images
+      mimeType?: string;
+    }>; 
+  }>;
   /** Composio client for workspace integrations */
   composioClient?: unknown;
   /** Abort signal for cancellation */
@@ -59,6 +70,8 @@ export interface RunPiQueryOptions {
   sessionId?: string;
   /** Pre-resolved credentials (for simple API key providers) */
   credentials: ResolvedCredentials;
+  /** Database client for connect_toolkit tool */
+  db?: unknown;
 }
 
 /**
@@ -91,7 +104,7 @@ function isMantleProvider(piProvider: string): boolean {
 
 /**
  * Create an AuthStorage with pre-injected credentials.
- * 
+ *
  * Note: AWS Bedrock uses Mantle API (OpenAI-compatible) and is handled
  * separately in runPiQuery(), not via AuthStorage.
  */
@@ -101,18 +114,18 @@ function createAuthStorageWithCredentials(
 ): AuthStorage {
   console.log(`[PiAgent:AuthStorage] Creating auth storage for provider: ${provider}`);
   console.log(`[PiAgent:AuthStorage] Credentials source: ${credentials.source}`);
-  
+
   const authProviderId = getAuthProviderId(provider);
-  
+
   // Build auth data for in-memory storage
   const authData: Record<string, { type: 'api_key'; key: string }> = {};
-  
+
   // Skip Mantle providers (they use custom streaming logic)
   if (isMantleProvider(provider)) {
     console.log(`[PiAgent:AuthStorage] Provider ${provider} uses Mantle API - skipping AuthStorage injection`);
     return AuthStorage.inMemory({});
   }
-  
+
   if (credentials.configured && credentials.apiKey) {
     authData[authProviderId] = {
       type: 'api_key',
@@ -120,19 +133,19 @@ function createAuthStorageWithCredentials(
     };
     console.log(`[PiAgent:AuthStorage] Injected API key for ${authProviderId}`);
   }
-  
+
   return AuthStorage.inMemory(authData);
 }
 
 /**
  * Run a query with Pi Agent and stream events through the EventAdapter.
- * 
+ *
  * This is the main entry point for chat queries. It:
  * 1. Validates credentials (from DB for user keys, from env for owner keys)
  * 2. Creates AuthStorage with injected credentials (for simple API key providers)
  * 3. Creates AgentSession via SDK
  * 4. Subscribes to events and streams responses
- * 
+ *
  * @yields StreamChunk events compatible with the frontend SSE format
  */
 export async function* runPiQuery(
@@ -150,6 +163,7 @@ export async function* runPiQuery(
     signal,
     sessionId,
     credentials,
+    db,
   } = options;
 
   console.log('='.repeat(60));
@@ -168,7 +182,7 @@ export async function* runPiQuery(
 
   // Check if this is an environment-based provider
   const isMantle = isMantleProvider(piProvider);
-  
+
   // Validate credentials
   if (!credentials.configured && !isMantle) {
     console.error('[PiAgent] ERROR: Credentials not configured');
@@ -220,8 +234,9 @@ export async function* runPiQuery(
     includeCodingTools: true,
     includeWebTools: true,
     includeComposioTools: !!composioClient,
+    db: getDb(),
   };
-  
+
   const tools = await buildWorkspaceTools(toolOptions);
   console.log(`[PiAgent] Built ${tools.length} tools`);
 
@@ -240,15 +255,15 @@ export async function* runPiQuery(
       };
       return;
     }
-    
+
     // Build messages for Mantle API
     const mantleMessages = [] as Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
-    
+
     // Add system prompt if present
     if (systemPrompt) {
       mantleMessages.push({ role: 'system', content: systemPrompt });
     }
-    
+
     // Add conversation messages
     for (const msg of messages) {
       mantleMessages.push({
@@ -256,7 +271,7 @@ export async function* runPiQuery(
         content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
       });
     }
-    
+
     // Create Mantle config with model, tools, and context window
     const mantleConfigWithModel = {
       ...mantleConfig,
@@ -264,11 +279,11 @@ export async function* runPiQuery(
       tools, // Pass tools for function calling support
       contextWindow: piModel.contextWindow, // Pass context window for compaction
     };
-    
+
     console.log(`[PiAgent] Streaming from Mantle with model: ${mantleConfigWithModel.model}`);
     console.log(`[PiAgent] Tools passed to Mantle: ${tools.length}`);
     console.log(`[PiAgent] Context window: ${piModel.contextWindow} tokens`);
-    
+
     // Stream from Mantle and yield chunks
     try {
       for await (const chunk of streamBedrockMantle(mantleConfigWithModel, mantleMessages, signal)) {
@@ -282,7 +297,7 @@ export async function* runPiQuery(
         provider,
       };
     }
-    
+
     console.log('[PiAgent] Mantle stream complete');
     return;
   }
@@ -291,14 +306,14 @@ export async function* runPiQuery(
   console.log('[PiAgent] Creating AgentSession...');
   console.log(`[PiAgent] Model: ${piModel.id} (${piModel.name})`);
   console.log(`[PiAgent] Model provider: ${piModel.provider}`);
-  
+
   let session: AgentSession;
   let extensionsResult: any;
-  
+
   try {
     // Log auth storage state
     console.log(`[PiAgent] AuthStorage state: ${JSON.stringify(Object.keys(authStorage as any).length)} keys`);
-    
+
     const result = await createAgentSession({
       authStorage,
       model: piModel,
@@ -306,13 +321,13 @@ export async function* runPiQuery(
       tools: tools as any,
       customTools: [],
     });
-    
+
     session = result.session;
     extensionsResult = result.extensionsResult;
-    
+
     console.log('[PiAgent] AgentSession created successfully');
     console.log(`[PiAgent] Extensions loaded: ${extensionsResult?.extensions?.length || 0}`);
-    
+
     if (result.modelFallbackMessage) {
       console.log(`[PiAgent] Model fallback: ${result.modelFallbackMessage}`);
     }
@@ -335,7 +350,7 @@ export async function* runPiQuery(
   // Subscribe to session events
   const unsubscribe = session.subscribe((event: AgentSessionEvent) => {
     console.log(`[PiAgent:Event] Received: ${event.type}`);
-    
+
     // Log tool execution events specially
     if (event.type === 'tool_execution_start') {
       const te = event as any;
@@ -345,7 +360,7 @@ export async function* runPiQuery(
       const te = event as any;
       console.log(`[PiAgent:Event] TOOL EXECUTION END - ID: ${te.toolCallId}, Error: ${te.isError}`);
     }
-    
+
     // Log full event for debugging
     if (event.type === 'agent_end') {
       console.log(`[PiAgent:Event] Full agent_end event:`, JSON.stringify(event, null, 2));
@@ -357,10 +372,10 @@ export async function* runPiQuery(
         console.log(`[PiAgent:Event] TOOLCALL START - Tool requested!`);
       }
     }
-    
+
     // Translate to StreamChunk
     const chunk = translateSessionEvent(event, eventAdapter);
-    
+
     if (chunk) {
       if (resolveEventPromise) {
         resolveEventPromise({ value: chunk, done: false });
@@ -379,7 +394,7 @@ export async function* runPiQuery(
         resolveEventPromise = null;
       }
     }
-    
+
     // Track errors
     if (event.type === 'agent_end' && 'error' in event && event.error) {
       errorMessage = String(event.error);
@@ -396,15 +411,29 @@ export async function* runPiQuery(
     // Build the prompt text from messages
     // The last message is the current user message
     const lastUserMessage = messages.filter(m => m.role === 'user').pop();
-    
+
     if (!lastUserMessage) {
       throw new Error('No user message found in context');
     }
 
-    console.log(`[PiAgent] Sending prompt: "${lastUserMessage.content.substring(0, 100)}..."`);
+    // Get text content for logging (handles both string and array content)
+    const contentPreview = typeof lastUserMessage.content === 'string'
+      ? lastUserMessage.content.substring(0, 100)
+      : '(multimodal content)';
+    console.log(`[PiAgent] Sending prompt: "${contentPreview}..."`);
 
-    // Send prompt to session
-    await session.prompt(lastUserMessage.content);
+    // Send prompt to session - handle both string and multimodal content
+    if (typeof lastUserMessage.content === 'string') {
+      await session.prompt(lastUserMessage.content);
+    } else {
+      // Extract text and images from multimodal content
+      const textParts = lastUserMessage.content.filter(c => c.type === 'text').map(c => c.text || '').join('\n');
+      const images: ImageContent[] = lastUserMessage.content
+        .filter(c => c.type === 'image')
+        .map(c => ({ type: 'image' as const, data: c.data || '', mimeType: c.mimeType || 'image/png' }));
+
+      await session.prompt(textParts, { images });
+    }
 
     // Yield events as they come
     while (!done) {
@@ -467,7 +496,7 @@ export async function* runPiQuery(
 
   } catch (error) {
     console.error('[PiAgent] Query error:', error);
-    
+
     if ((error as Error).name === 'AbortError' || signal?.aborted) {
       console.log('[PiAgent] Query aborted');
       yield eventAdapter.translateAbort();
@@ -494,7 +523,7 @@ function translateSessionEvent(
 ): StreamChunk | null {
   // Log all event details for debugging
   console.log(`[PiAgent:Translate] Event type: ${event.type}`);
-  
+
   switch (event.type) {
     case 'agent_start':
       return {
@@ -502,28 +531,28 @@ function translateSessionEvent(
         session_id: adapter.sessionId || 'new',
         provider: adapter.provider,
       };
-      
+
     case 'message_update':
       console.log('[PiAgent:Translate] Processing message_update');
       return adapter.translate(event as any);
-      
+
     case 'tool_execution_start':
     case 'tool_execution_end':
       return adapter.translate(event as any);
-      
+
     case 'agent_end':
       // Check for error in agent_end
       if ('error' in event && event.error) {
         console.log('[PiAgent:Translate] Agent ended with error:', event.error);
       }
       return { type: 'done', provider: adapter.provider };
-      
+
     case 'turn_start':
     case 'turn_end':
     case 'message_start':
     case 'message_end':
       return null;
-      
+
     default:
       console.log(`[PiAgent:Event] Unhandled event type: ${(event as any).type}`);
       return null;
@@ -532,7 +561,7 @@ function translateSessionEvent(
 
 /**
  * Initialize Pi Agent on server startup
- * 
+ *
  * Validates configuration and logs Pi Agent status.
  */
 export async function initializePiAgent(): Promise<void> {
@@ -564,7 +593,7 @@ export async function initializePiAgent(): Promise<void> {
       console.log(`  Name: ${defaultModel.name}`);
       console.log(`  Context window: ${defaultModel.contextWindow} tokens`);
       console.log(`  Max output: ${defaultModel.maxTokens} tokens`);
-      
+
       if (defaultModel.cost) {
         console.log(
           `  Cost: $${defaultModel.cost.input}/M input, ` +

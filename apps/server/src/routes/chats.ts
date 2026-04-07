@@ -204,9 +204,9 @@ router.post('/:chatId/messages', asyncHandler(async (req: Request, res: Response
 // ============================================
 router.post('/:chatId/stream', asyncHandler(async (req: Request, res: Response) => {
   const chatId = getStringParam(req.params.chatId);
-  const { message, provider, model, workspaceId } = req.body;
+  const { message, provider, model, workspaceId, attachments } = req.body;
 
-  console.log('[STREAM] Request:', { chatId, provider, model, messagePreview: message?.substring(0, 50) });
+  console.log('[STREAM] Request:', { chatId, provider, model, messagePreview: message?.substring(0, 50), hasAttachments: !!attachments?.length });
 
   // Validate required fields
   if (!message || !provider || !model) {
@@ -224,7 +224,8 @@ router.post('/:chatId/stream', asyncHandler(async (req: Request, res: Response) 
     provider,
     model,
     workspaceId,
-    userId: req.userId!
+    userId: req.userId!,
+    attachments
   }, req, res);
 }));
 

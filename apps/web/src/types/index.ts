@@ -17,6 +17,7 @@ export type {
   StreamChunk,
   StreamChunkLegacy,
   AttachedFile,
+  Attachment,
   ThinkingMode,
   BrowserSession,
 } from "@normie/types";

@@ -333,6 +333,10 @@ contextBridge.exposeInMainWorld('authAPI', {
 
   // Delete chat
   deleteChat: async (chatId: string): Promise<void> => {
+    // First delete attachments from disk
+    await ipcRenderer.invoke('delete-chat-attachments', chatId);
+    
+    // Then delete the chat from the server
     const response = await fetchWithAuth(`${SERVER_URL}/api/chats/${chatId}`, {
       method: 'DELETE'
     });
@@ -384,7 +388,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     provider: string = 'claude',
     model: string | null = null,
     workspaceId: string | null = null,
-    userId: string | null = null
+    userId: string | null = null,
+    attachments?: Array<{
+      filename: string;
+      originalName: string;
+      mimeType: string;
+      size: number;
+      storagePath: string;
+    }>
   ): Promise<StreamResponse> => {
     // Abort any previous request
     if (currentAbortController) {
@@ -396,7 +407,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const signal = currentAbortController.signal;
 
     return new Promise((resolve, reject) => {
-      console.log('[PRELOAD] Sending message to Pi Agent:', { chatId, provider, model });
+      console.log('[PRELOAD] Sending message to Pi Agent:', { chatId, provider, model, attachments: attachments?.length || 0 });
 
       // Use new /api/chats/:chatId/stream endpoint
       fetch(`${SERVER_URL}/api/chats/${chatId}/stream`, {
@@ -409,7 +420,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
           message, 
           provider, 
           model,
-          workspaceId
+          workspaceId,
+          attachments
         }),
         signal
       })
@@ -499,5 +511,48 @@ contextBridge.exposeInMainWorld('electronAPI', {
       // Fallback to window.open
       window.open(url, '_blank', 'noopener,noreferrer');
     }
+  },
+
+  // ============================================
+  // FILE ATTACHMENT APIs
+  // ============================================
+
+  // Select files via native file picker
+  selectFiles: async (): Promise<{ success: boolean; files?: Array<{ path: string; name: string; size: number; type: string }>; error?: string }> => {
+    return await ipcRenderer.invoke('select-files');
+  },
+
+  // Read file as data URL (for previews)
+  readFileAsDataUrl: async (filePath: string): Promise<string> => {
+    return await ipcRenderer.invoke('read-file-data-url', filePath);
+  },
+
+  // Save attachments to disk
+  saveAttachments: async (
+    chatId: string,
+    files: Array<{ data: string; name: string; type: string; size: number }>
+  ): Promise<{ success: boolean; attachments?: Array<{
+    filename: string;
+    originalName: string;
+    mimeType: string;
+    size: number;
+    storagePath: string;
+  }>; error?: string }> => {
+    return await ipcRenderer.invoke('save-attachments', chatId, files);
+  },
+
+  // Read attachment from disk
+  readAttachment: async (storagePath: string): Promise<{ data: string; mimeType: string }> => {
+    return await ipcRenderer.invoke('read-attachment', storagePath);
+  },
+
+  // Delete all attachments for a chat
+  deleteChatAttachments: async (chatId: string): Promise<void> => {
+    return await ipcRenderer.invoke('delete-chat-attachments', chatId);
+  },
+
+  // Open attachment with system default app
+  openAttachment: async (storagePath: string): Promise<void> => {
+    return await ipcRenderer.invoke('open-attachment', storagePath);
   }
 });

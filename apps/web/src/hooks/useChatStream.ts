@@ -143,6 +143,13 @@ export function useChatStream(): UseChatStreamReturn {
         model: string;
         workspaceId: string | null;
         userId: string;
+        attachments?: Array<{
+          filename: string;
+          originalName: string;
+          mimeType: string;
+          size: number;
+          storagePath: string;
+        }>;
       },
       callbacks?: {
         onTitleUpdate?: (title: string) => void;
@@ -156,6 +163,7 @@ export function useChatStream(): UseChatStreamReturn {
         model,
         workspaceId,
         userId,
+        attachments,
       } = params;
 
       if (!content.trim() || isStreaming) return null;
@@ -191,6 +199,7 @@ export function useChatStream(): UseChatStreamReturn {
           model,
           workspaceId,
           userId,
+          attachments,
         });
 
         let blocks: MessageBlock[] = [];
@@ -227,6 +236,56 @@ export function useChatStream(): UseChatStreamReturn {
                       ]);
                     }
                     // Update message with new blocks
+                    setMessages((prev) =>
+                      prev.map((m) =>
+                        m.id === assistantMessageId
+                          ? { ...m, blocks: [...blocks], reasoning: fullReasoning }
+                          : m
+                      )
+                    );
+                  }
+                  break;
+
+                case 'connection_action':
+                  // Handle connection action from connect_toolkit tool
+                  if (data.data) {
+                    const localToolId = generateId();
+                    const startTime = Date.now();
+
+                    // Create an inline tool call for the connection
+                    const inlineToolCall: InlineToolCall = {
+                      id: localToolId,
+                      name: 'connect_toolkit',
+                      input: {
+                        toolkitSlug: data.data.toolkitSlug,
+                        reason: data.data.message,
+                      },
+                      status: 'success',
+                      result: data.data,
+                      startTime,
+                      duration: 0,
+                    };
+
+                    // Append tool block with connection result
+                    blocks = [
+                      ...blocks,
+                      { type: 'tool', toolCall: inlineToolCall } as ToolBlock,
+                    ];
+
+                    // Also track in ToolCall[] state
+                    const toolCall: ToolCall = {
+                      id: localToolId,
+                      name: 'connect_toolkit',
+                      input: {
+                        toolkitSlug: data.data.toolkitSlug,
+                        reason: data.data.message,
+                      },
+                      status: 'success',
+                      result: data.data,
+                    };
+                    setToolCalls((prev) => [...prev, toolCall]);
+
+                    // Update message
                     setMessages((prev) =>
                       prev.map((m) =>
                         m.id === assistantMessageId

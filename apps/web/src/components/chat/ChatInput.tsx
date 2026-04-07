@@ -7,7 +7,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import {
   Send,
-  Paperclip,
   Square,
   ChevronDown,
   Check as CheckIcon,
@@ -15,6 +14,9 @@ import {
 } from "lucide-react";
 import type { Provider } from "@normie/types";
 import type { ModelOption } from "@/hooks/useProviders";
+import type { PendingAttachment } from "@/hooks/useAttachments";
+import { AttachmentButton } from "./AttachmentButton";
+import { AttachmentPreviewArea } from "./AttachmentPreviewArea";
 
 interface ChatInputProps {
   variant?: "home" | "chat";
@@ -35,6 +37,11 @@ interface ChatInputProps {
   // State
   isStreaming: boolean;
   isLoadingProviders?: boolean;
+
+  // Attachments
+  attachments?: PendingAttachment[];
+  onAddFiles?: (files: Array<{ path: string; name: string; size: number; type: string; data: string }>) => Promise<void>;
+  onRemoveAttachment?: (id: string) => void;
 }
 
 export function ChatInput({
@@ -50,6 +57,9 @@ export function ChatInput({
   onStop,
   isStreaming,
   isLoadingProviders = false,
+  attachments = [],
+  onAddFiles,
+  onRemoveAttachment,
 }: ChatInputProps) {
   const [message, setMessage] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -107,13 +117,21 @@ export function ChatInput({
       className={
         variant === "home"
           ? "w-full max-w-[720px]"
-          : "pb-4 max-w-[720px] mx-auto w-full"
+          : "pb-4 max-w-[720px] mx-auto w-full px-4"
       }
     >
       <form
         onSubmit={handleSubmit}
         className="bg-zinc-50 border border-zinc-200 rounded-xl p-3.5 flex flex-col gap-3"
       >
+        {/* Attachment preview area */}
+        {attachments.length > 0 && onRemoveAttachment && (
+          <AttachmentPreviewArea
+            attachments={attachments}
+            onRemoveAttachment={onRemoveAttachment}
+          />
+        )}
+
         <textarea
           ref={textareaRef}
           value={message}
@@ -129,12 +147,11 @@ export function ChatInput({
 
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              className="w-8 h-8 rounded-full bg-white border border-zinc-200 flex items-center justify-center hover:bg-zinc-50 transition-colors text-zinc-500"
-            >
-              <Paperclip className="w-4 h-4" strokeWidth={1.5} />
-            </button>
+            <AttachmentButton
+              onSelectFiles={onAddFiles || (async () => {})}
+              disabled={!onAddFiles}
+              isStreaming={isStreaming}
+            />
             <div className="h-5 w-px bg-zinc-200 mx-1" />
 
             {/* Provider Selector */}

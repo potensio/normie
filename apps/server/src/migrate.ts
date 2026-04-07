@@ -84,6 +84,33 @@ async function migrate() {
       }
     }
     
+    // Check and create message_attachments table
+    const { rows: attachmentTableExists } = await pool.query(`
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_name = 'message_attachments'
+    `);
+    
+    if (attachmentTableExists.length === 0) {
+      console.log('[MIGRATE] Creating message_attachments table...');
+      await pool.query(`
+        CREATE TABLE message_attachments (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          message_id UUID NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+          filename VARCHAR(255) NOT NULL,
+          original_name VARCHAR(255) NOT NULL,
+          mime_type VARCHAR(100) NOT NULL,
+          size INTEGER NOT NULL,
+          storage_path TEXT NOT NULL,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        )
+      `);
+      await pool.query(`
+        CREATE INDEX idx_message_attachments_message ON message_attachments(message_id)
+      `);
+      console.log('[MIGRATE] message_attachments table created');
+    }
+    
     // List tables
     const { rows } = await pool.query(`
       SELECT table_name 

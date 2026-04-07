@@ -7,11 +7,13 @@ import {
   type ComposioToolConfig,
 } from './composio-tools.js';
 import { webSearchTool, webFetchTool } from './web-tools.js';
+import { createConnectToolkitTool } from './connect-toolkit-tool.js';
 
 // Re-export for external use
 export { buildComposioTools, getComposioClient, type ComposioToolConfig } from './composio-tools.js';
 export { webSearchTool, webFetchTool } from './web-tools.js';
 export { codingTools, readOnlyTools, grepTool, findTool, lsTool } from '@mariozechner/pi-coding-agent';
+export { createConnectToolkitTool } from './connect-toolkit-tool.js';
 
 /**
  * Tool builder configuration options
@@ -40,6 +42,19 @@ export interface ToolBuilderOptions extends ComposioToolConfig {
    * @default true
    */
   includeComposioTools?: boolean;
+
+  /**
+   * Whether to include the connect_toolkit meta-tool
+   * This tool is always available and allows the AI to initiate OAuth connections
+   * @default true
+   */
+  includeConnectToolkit?: boolean;
+
+  /**
+   * Database client for connect_toolkit tool
+   * Required when includeConnectToolkit is true
+   */
+  db?: unknown;
 
   /**
    * Additional custom tools to include
@@ -73,6 +88,8 @@ export async function buildWorkspaceTools(
     readOnlyMode = false,
     includeWebTools = true,
     includeComposioTools = true,
+    includeConnectToolkit = true,
+    db,
     customTools = [],
     ...composioConfig
   } = options;
@@ -114,6 +131,17 @@ export async function buildWorkspaceTools(
       );
       // Continue without Composio tools rather than failing
     }
+  }
+
+  // Add connect_toolkit meta-tool (always available for proactive connection suggestions)
+  if (includeConnectToolkit && composioConfig.workspaceId && composioConfig.userId && db) {
+    const connectTool = createConnectToolkitTool({
+      workspaceId: composioConfig.workspaceId,
+      userId: composioConfig.userId,
+      db: db as any,
+    });
+    tools.push(connectTool);
+    console.log('[ToolSystem] Added connect_toolkit meta-tool');
   }
 
   // Add any custom tools
