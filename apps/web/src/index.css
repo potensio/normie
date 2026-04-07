@@ -32,7 +32,6 @@
 
 @layer base {
   :root {
-    --font-size: 16px;
     --background: #ffffff;
     --foreground: oklch(0.145 0 0);
     --card: #ffffff;
@@ -160,7 +159,6 @@
 
   html {
     @apply h-full overflow-hidden;
-    font-size: var(--font-size);
   }
 
   body {
@@ -178,59 +176,41 @@
   }
 
   h1 {
-    font-size: 1.125rem;   /* 18px */
+    font-size: 1.125rem; /* 18px */
     font-weight: 600;
     line-height: 1.25;
   }
 
   h2 {
-    font-size: 1.0625rem;  /* 17px */
+    font-size: 1.0625rem; /* 17px */
     font-weight: 600;
     line-height: 1.25;
   }
 
   h3 {
-    font-size: 1rem;       /* 16px */
+    font-size: 1rem; /* 16px */
     font-weight: 500;
     line-height: 1.25;
   }
 
   h4 {
-    font-size: 0.9375rem;  /* 15px - same as body */
+    font-size: 0.9375rem; /* 15px - same as body */
     font-weight: 600;
     line-height: 1.25;
   }
 
   h5 {
-    font-size: 0.9375rem;  /* 15px - same as body */
+    font-size: 0.9375rem; /* 15px - same as body */
     font-weight: 500;
     line-height: 1.25;
   }
 
   h6 {
-    font-size: 0.875rem;   /* 14px */
+    font-size: 0.875rem; /* 14px */
     font-weight: 600;
     line-height: 1.25;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-  }
-
-  label {
-    font-size: 1rem;
-    font-weight: var(--font-weight-medium);
-    line-height: 1.5;
-  }
-
-  button {
-    font-size: 1rem;
-    font-weight: var(--font-weight-medium);
-    line-height: 1.5;
-  }
-
-  input {
-    font-size: 1rem;
-    font-weight: var(--font-weight-normal);
-    line-height: 1.5;
   }
 }
 

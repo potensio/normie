@@ -14,11 +14,9 @@ export default {
         // Design System - Core Colors
         "primary-dark": "#111111",
         "bg-base": "#FAFAFA",
-        text: {
-          primary: "#101828",
-          secondary: "#4A5565",
-          tertiary: "#6A7282",
-        },
+        "text-primary": "#101828",
+        "text-secondary": "#4A5565",
+        "text-tertiary": "#6A7282",
         surface: {
           DEFAULT: "#FFFFFF",
           secondary: "#F9FAFB",
@@ -137,24 +135,40 @@ export default {
         ],
       },
       fontSize: {
-        xs: ["0.765625rem", { lineHeight: "1.43" }],
-        sm: ["0.875rem", { lineHeight: "1.5" }],
-        base: ["1.09375rem", { lineHeight: "1.625" }],
-        lg: ["1.3125rem", { lineHeight: "1.375" }],
-        xl: ["1.96875rem", { lineHeight: "1.111" }],
-        "2xl": ["2.625rem", { lineHeight: "1" }],
-        "3xl": ["3.28125rem", { lineHeight: "1" }],
-        "4xl": ["5.25rem", { lineHeight: "1" }],
+        xs: ["0.75rem", { lineHeight: "1rem" }], // 12px
+        sm: ["0.875rem", { lineHeight: "1.25rem" }], // 14px
+        base: ["1rem", { lineHeight: "1.5rem" }], // 16px
+        lg: ["1.125rem", { lineHeight: "1.75rem" }], // 18px
+        xl: ["1.25rem", { lineHeight: "1.75rem" }], // 20px
+        "2xl": ["1.5rem", { lineHeight: "2rem" }], // 24px
+        "3xl": ["1.875rem", { lineHeight: "2.25rem" }], // 30px
+        "4xl": ["2.25rem", { lineHeight: "2.5rem" }], // 36px
       },
       spacing: {
-        1: "0.4375rem",
-        2: "0.875rem",
-        3: "1.3125rem",
-        4: "1.75rem",
-        5: "2.1875rem",
-        6: "2.625rem",
-        8: "3.5rem",
-        14: "6.125rem",
+        0: "0",
+        px: "1px",
+        0.5: "0.125rem", // 2px
+        1: "0.25rem", // 4px
+        1.5: "0.375rem", // 6px
+        2: "0.5rem", // 8px
+        2.5: "0.625rem", // 10px
+        3: "0.75rem", // 12px
+        3.5: "0.875rem", // 14px
+        4: "1rem", // 16px
+        5: "1.25rem", // 20px
+        6: "1.5rem", // 24px
+        7: "1.75rem", // 28px
+        8: "2rem", // 32px
+        9: "2.25rem", // 36px
+        10: "2.5rem", // 40px
+        11: "2.75rem", // 44px
+        12: "3rem", // 48px
+        14: "3.5rem", // 56px
+        16: "4rem", // 64px
+        20: "5rem", // 80px
+        24: "6rem", // 96px
+        28: "7rem", // 112px
+        32: "8rem", // 128px
       },
       fontWeight: {
         light: "300",
