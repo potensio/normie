@@ -245,9 +245,3 @@ dotenv.config({ path: path.join(__dirname, "..", "..", "..", ".env") });
 
 - When user says: "create doc", "write documentation", "bikin dokumentasi", "buat README", etc.
 - When user shares a requirements/spec document and asks to translate it into a design doc
-
-**Code comments are allowed and encouraged:**
-
-- Inline comments explaining complex logic
-- JSDoc for public APIs
-- TODO/FIXME comments
