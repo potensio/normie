@@ -180,6 +180,7 @@ export async function* runPiQuery(
 
   // Build workspace tools
   console.log("[PiAgent] Building workspace tools...");
+  console.log(`[PiAgent] Composio client available: ${!!composioClient}`);
   const toolOptions: ToolBuilderOptions = {
     workspaceId,
     userId,
@@ -192,6 +193,7 @@ export async function* runPiQuery(
 
   const tools = await buildWorkspaceTools(toolOptions);
   console.log(`[PiAgent] Built ${tools.length} tools`);
+  console.log(`[PiAgent] Tool names: ${tools.map((t) => t.name).join(", ")}`);
 
   // Create AuthStorage with injected credentials
   // For bedrock, use "bedrock" as auth provider (not "amazon-bedrock")

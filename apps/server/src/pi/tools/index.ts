@@ -13,7 +13,6 @@ import {
   type ComposioToolConfig,
 } from "./composio-tools.js";
 import { webSearchTool, webFetchTool } from "./web-tools.js";
-import { createConnectToolkitTool } from "./connect-toolkit-tool.js";
 import path from "path";
 
 /**
@@ -132,7 +131,6 @@ export {
   findTool,
   lsTool,
 } from "@mariozechner/pi-coding-agent";
-export { createConnectToolkitTool } from "./connect-toolkit-tool.js";
 
 /**
  * Tool builder configuration options
@@ -161,13 +159,6 @@ export interface ToolBuilderOptions extends ComposioToolConfig {
    * @default true
    */
   includeComposioTools?: boolean;
-
-  /**
-   * Whether to include the connect_toolkit meta-tool
-   * This tool is always available and allows the AI to initiate OAuth connections
-   * @default true
-   */
-  includeConnectToolkit?: boolean;
 
   /**
    * Database client for connect_toolkit tool
@@ -207,7 +198,6 @@ export async function buildWorkspaceTools(
     readOnlyMode = false,
     includeWebTools = true,
     includeComposioTools = true,
-    includeConnectToolkit = true,
     db,
     customTools = [],
     ...composioConfig
@@ -250,39 +240,34 @@ export async function buildWorkspaceTools(
     tools.push(webFetchTool as unknown as AgentTool<TSchema>);
   }
 
-  // Add Composio tools for this workspace
+  // Add Composio tools for ALL available integrations
   if (
     includeComposioTools &&
     composioConfig.workspaceId &&
-    composioConfig.userId
+    composioConfig.userId &&
+    composioConfig.composioClient
   ) {
     try {
+      // Build tools for ALL toolkits (Composio SDK loads them all)
       const composioTools = await buildComposioTools(composioConfig);
-      tools.push(...composioTools);
+
+      if (composioTools.length > 0) {
+        tools.push(...composioTools);
+        console.log(
+          `[ToolSystem] Added ${composioTools.length} Composio tools from all available integrations`,
+        );
+      }
     } catch (error) {
       console.error(
         "[ToolSystem] Error building Composio tools:",
         error instanceof Error ? error.message : String(error),
       );
-      // Continue without Composio tools rather than failing
     }
   }
 
   // Add connect_toolkit meta-tool (always available for proactive connection suggestions)
-  if (
-    includeConnectToolkit &&
-    composioConfig.workspaceId &&
-    composioConfig.userId &&
-    db
-  ) {
-    const connectTool = createConnectToolkitTool({
-      workspaceId: composioConfig.workspaceId,
-      userId: composioConfig.userId,
-      db: db as any,
-    });
-    tools.push(connectTool);
-    console.log("[ToolSystem] Added connect_toolkit meta-tool");
-  }
+  // Note: This is now handled by Composio awareness tools
+  // No separate connect_toolkit tool needed
 
   // Add any custom tools
   if (customTools.length > 0) {

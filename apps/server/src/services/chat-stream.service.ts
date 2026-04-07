@@ -494,6 +494,7 @@ export async function streamChat(
       const { getComposioClient } =
         await import("../pi/tools/composio-tools.js");
       composioClient = getComposioClient();
+      console.log("[STREAM] Composio client initialized successfully");
     } catch (err) {
       console.warn("[STREAM] Composio not available:", (err as Error).message);
     }

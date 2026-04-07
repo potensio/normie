@@ -230,3 +230,24 @@ dotenv.config({ path: path.join(__dirname, "..", "..", "..", ".env") });
 - Check logs for `[STREAM:Watchdog]`, `[PiAgent]`, `[BedrockMantle]` warnings
 - All timeouts are configurable (search for `Ms` constants)
 - Tool timeouts are graceful (stream continues with error message)
+
+---
+
+## 11. Documentation Rules
+
+**NEVER create documentation files unless explicitly requested:**
+
+- **NO `.md` files** (design docs, READMEs, changelogs, architecture docs, etc.)
+- **NO documentation PRs** or inline documentation beyond code comments
+- **NO wiki pages** or external documentation platforms
+
+**Exception - ONLY if explicitly asked:**
+
+- When user says: "create doc", "write documentation", "bikin dokumentasi", "buat README", etc.
+- When user shares a requirements/spec document and asks to translate it into a design doc
+
+**Code comments are allowed and encouraged:**
+
+- Inline comments explaining complex logic
+- JSDoc for public APIs
+- TODO/FIXME comments
