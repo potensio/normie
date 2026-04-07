@@ -6,7 +6,7 @@
  *
  * Credential Flow:
  * - Simple API key providers (Anthropic, OpenAI, etc): Injected via AuthStorage.inMemory()
- * - AWS Bedrock: Uses BEDROCK_API_KEY + BEDROCK_BASE_URL (OpenAI-compatible API)
+ * - AWS Bedrock: Uses BEDROCK_API_KEY + BEDROCK_BASE_URL (OpenAI-compatible Mantle API)
  * - Owner-managed: Bedrock credentials are server-level, not user-configurable
  */
 
@@ -197,31 +197,18 @@ export async function* runPiQuery(
   console.log(`[PiAgent] Built ${tools.length} tools`);
 
   // Create AuthStorage with injected credentials
-  // For bedrock, use "bedrock" as auth provider (not "amazon-bedrock")
-  const authProvider = provider === "amazon-bedrock" ? "bedrock" : provider;
-  const authStorage = createAuthStorageWithCredentials(
-    authProvider,
-    credentials,
-  );
+  const authStorage = createAuthStorageWithCredentials(piProvider, credentials);
 
   // Create ModelRegistry
   console.log("[PiAgent] Creating ModelRegistry...");
   const modelRegistry = ModelRegistry.inMemory(authStorage);
 
   // Register custom Bedrock provider if needed
-  // Check both "bedrock" and "amazon-bedrock" (aliased name)
-  if (provider === "bedrock" || provider === "amazon-bedrock") {
+  if (piProvider === "bedrock") {
     console.log("[PiAgent] Registering custom Bedrock provider...");
-    console.log(
-      `[PiAgent]   credentials.apiKey: ${credentials.apiKey?.substring(0, 20)}...`,
-    );
-    console.log(
-      `[PiAgent]   process.env.BEDROCK_API_KEY: ${process.env.BEDROCK_API_KEY?.substring(0, 20)}...`,
-    );
-
     modelRegistry.registerProvider("bedrock", {
       baseUrl: process.env.BEDROCK_BASE_URL!,
-      apiKey: process.env.BEDROCK_API_KEY!, // Use env directly like POC
+      apiKey: credentials.apiKey!,
       api: "openai-completions",
       authHeader: true,
       models: BEDROCK_MODELS,
@@ -232,22 +219,19 @@ export async function* runPiQuery(
   }
 
   // Get model from registry
-  // For bedrock, always use "bedrock" as the provider name (not "amazon-bedrock")
   console.log("[PiAgent] Getting model from registry...");
-  const registryProvider = provider === "amazon-bedrock" ? "bedrock" : provider;
-  const piModel = modelRegistry.find(registryProvider, model);
+  const piModel = modelRegistry.find(piProvider, model);
   if (!piModel) {
-    console.error(`[PiAgent] Model not found: ${registryProvider}/${model}`);
+    console.error(`[PiAgent] Model not found: ${piProvider}/${model}`);
     yield {
       type: "error",
-      message: `Model '${registryProvider}/${model}' not found`,
+      message: `Model '${piProvider}/${model}' not found`,
       provider,
     };
     return;
   }
   console.log(`[PiAgent] Model: ${piModel.id} (${piModel.name})`);
   console.log(`[PiAgent] Model provider: ${piModel.provider}`);
-  console.log(`[PiAgent] Model API: ${(piModel as any).api}`);
   console.log(`[PiAgent] Context window: ${piModel.contextWindow} tokens`);
 
   // Create AgentSession using SDK
@@ -540,15 +524,39 @@ export async function initializePiAgent(): Promise<void> {
   console.log(`  Default model: ${config.defaultModel}`);
   console.log(`  Enabled providers: ${config.enabledProviders.join(", ")}`);
 
-  // Log AWS Bedrock configuration
+  // Log AWS Bedrock Mantle configuration
   if (process.env.BEDROCK_API_KEY && process.env.BEDROCK_BASE_URL) {
-    console.log("[PiAgent] AWS Bedrock configured:");
+    console.log("[PiAgent] AWS Bedrock Mantle configured:");
     console.log(`  API Key: ***${process.env.BEDROCK_API_KEY.slice(-8)}`);
     console.log(`  Base URL: ${process.env.BEDROCK_BASE_URL}`);
-    console.log(`  Models: ${BEDROCK_MODELS.length}`);
   } else {
     console.log(
-      "[PiAgent] AWS Bedrock: Not configured (need BEDROCK_API_KEY and BEDROCK_BASE_URL)",
+      "[PiAgent] AWS Bedrock Mantle: Not configured (need BEDROCK_API_KEY and BEDROCK_BASE_URL)",
+    );
+  }
+
+  // Try to get default model info
+  try {
+    const defaultModel = getModel(
+      config.defaultProvider as any,
+      config.defaultModel as any,
+    );
+    if (defaultModel) {
+      console.log(`[PiAgent] Default model info:`);
+      console.log(`  Name: ${defaultModel.name}`);
+      console.log(`  Context window: ${defaultModel.contextWindow} tokens`);
+      console.log(`  Max output: ${defaultModel.maxTokens} tokens`);
+
+      if (defaultModel.cost) {
+        console.log(
+          `  Cost: $${defaultModel.cost.input}/M input, ` +
+            `$${defaultModel.cost.output}/M output`,
+        );
+      }
+    }
+  } catch (error) {
+    console.log(
+      `[PiAgent] Could not load default model info: ${(error as Error).message}`,
     );
   }
 

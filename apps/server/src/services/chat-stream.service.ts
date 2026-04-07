@@ -14,7 +14,7 @@ import {
   ForbiddenError,
   ValidationError,
 } from "../middleware/index.js";
-import { getValidatedModel, runPiQuery } from "../pi/index.js";
+import { runPiQuery } from "../pi/index.js";
 import {
   resolveCredentials,
   type ResolvedCredentials,
@@ -88,7 +88,7 @@ export function startHeartbeat(res: Response): NodeJS.Timeout {
     if (!res.writableEnded) {
       res.write(": heartbeat\n\n");
     }
-  }, 15000);
+  }, 30000); // Increased to 30s for long-running tools
 }
 
 /**
@@ -355,6 +355,44 @@ export async function generateAndSaveTitle(
 }
 
 // ============================================
+// Watchdog for Stuck Streams
+// ============================================
+
+/**
+ * Watchdog to detect stuck streams (no data for extended period)
+ */
+export function startStreamWatchdog(
+  res: Response,
+  timeoutMs: number = 60000, // 60 seconds default
+  onTimeout: () => void,
+): { reset: () => void; stop: () => void } {
+  let lastActivityTime = Date.now();
+  let watchdogTimer: NodeJS.Timeout;
+
+  const checkActivity = () => {
+    const timeSinceActivity = Date.now() - lastActivityTime;
+    if (timeSinceActivity > timeoutMs) {
+      console.warn(
+        `[STREAM:Watchdog] ⚠️ No activity for ${Math.round(timeSinceActivity / 1000)}s - stream may be stuck`,
+      );
+      onTimeout();
+    }
+  };
+
+  // Check every 10 seconds
+  watchdogTimer = setInterval(checkActivity, 10000);
+
+  return {
+    reset: () => {
+      lastActivityTime = Date.now();
+    },
+    stop: () => {
+      clearInterval(watchdogTimer);
+    },
+  };
+}
+
+// ============================================
 // Main Stream Function
 // ============================================
 
@@ -399,6 +437,20 @@ export async function streamChat(
 
   // Merge external signal with internal abort
   const effectiveSignal = signal || abortController.signal;
+
+  // Setup stream timeout (2 minutes for entire stream)
+  const streamTimeoutMs = 120000; // 2 minutes
+  const streamTimeout = setTimeout(() => {
+    console.error(
+      `[STREAM] ⚠️ Stream timeout after ${streamTimeoutMs / 1000}s - aborting`,
+    );
+    abortController.abort();
+  }, streamTimeoutMs);
+
+  // Setup watchdog to detect stuck streams
+  const watchdog = startStreamWatchdog(res, 60000, () => {
+    console.warn("[STREAM:Watchdog] Stream appears stuck - will abort soon");
+  });
 
   let assistantResponse = "";
   let sessionId: string | undefined;
@@ -472,6 +524,9 @@ export async function streamChat(
       credentials,
       db,
     })) {
+      // Reset watchdog on any activity
+      watchdog.reset();
+
       // Send to client
       sendSSEEvent(res, chunk);
 
@@ -537,6 +592,9 @@ export async function streamChat(
     // Unregister session
     sessionTracker.unregisterSession(chatId);
 
+    // Cleanup
+    clearTimeout(streamTimeout);
+    watchdog.stop();
     stopHeartbeat(heartbeat);
     if (!res.writableEnded) {
       res.end();
@@ -547,6 +605,9 @@ export async function streamChat(
     // Unregister session on error too
     sessionTracker.unregisterSession(chatId);
 
+    // Cleanup
+    clearTimeout(streamTimeout);
+    watchdog.stop();
     stopHeartbeat(heartbeat);
     console.error("[STREAM] Error:", error);
 

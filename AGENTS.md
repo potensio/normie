@@ -167,3 +167,33 @@ COMPOSIO_API_KEY=   # Tool Router (optional)
 ```ts
 dotenv.config({ path: path.join(__dirname, "..", "..", "..", ".env") });
 ```
+
+---
+
+## 9. Stream Timeout & Reliability
+
+**Problem:** AI streams could hang indefinitely without timeout protection.
+
+**Solution:** Multi-layer timeout protection (see `STREAM_TIMEOUT_FIX.md` for details)
+
+**Timeout Layers:**
+
+| Layer          | Timeout | Purpose                 |
+| -------------- | ------- | ----------------------- |
+| Stream         | 120s    | Overall stream timeout  |
+| Watchdog       | 60s     | Detect stuck streams    |
+| Event Loop     | 60s     | Pi Agent activity       |
+| Chunk Activity | 60s     | Mantle API activity     |
+| Tool Execution | 30s     | Individual tool timeout |
+
+**Key Files:**
+
+- `apps/server/src/services/chat-stream.service.ts` - Stream & watchdog
+- `apps/server/src/providers/bedrock-mantle-provider.ts` - Tool & chunk timeouts
+- `apps/server/src/pi/index.ts` - Event loop timeout
+
+**Debugging:**
+
+- Check logs for `[STREAM:Watchdog]`, `[PiAgent]`, `[BedrockMantle]` warnings
+- All timeouts are configurable (search for `Ms` constants)
+- Tool timeouts are graceful (stream continues with error message)
