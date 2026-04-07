@@ -246,7 +246,14 @@ interface UseChatSenderParams {
       model: string;
       workspaceId: string | null;
       userId: string;
-      attachments?: Array<{ path: string }>;
+      attachments?: Array<{
+        id: string;
+        filename: string;
+        originalName: string;
+        mimeType: string;
+        size: number;
+        storagePath: string;
+      }>;
     },
     callbacks?: {
       onTitleUpdate?: (title: string) => void;
@@ -258,7 +265,14 @@ interface UseChatSenderParams {
 interface UseChatSenderReturn {
   sendMessage: (
     content: string,
-    attachments?: Array<{ path: string }>,
+    attachments?: Array<{
+      id: string;
+      filename: string;
+      originalName: string;
+      mimeType: string;
+      size: number;
+      storagePath: string;
+    }>,
   ) => Promise<void>;
 }
 
@@ -286,7 +300,17 @@ export function useChatSender(
   const generatedTitleRef = useRef<string | null>(null);
 
   const sendMessage = useCallback(
-    async (content: string, attachments?: Array<{ path: string }>) => {
+    async (
+      content: string,
+      attachments?: Array<{
+        id: string;
+        filename: string;
+        originalName: string;
+        mimeType: string;
+        size: number;
+        storagePath: string;
+      }>,
+    ) => {
       if (!content.trim() || isStreaming || !userId) return;
 
       const chatId = currentChat?.id || crypto.randomUUID();

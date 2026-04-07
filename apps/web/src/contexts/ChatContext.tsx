@@ -46,6 +46,7 @@ interface ChatContextType {
   sendMessage: (
     content: string,
     attachments?: Array<{
+      id: string;
       filename: string;
       originalName: string;
       mimeType: string;
@@ -168,7 +169,17 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   );
 
   const sendMessage = useCallback(
-    async (content: string, attachments?: Array<{ path: string }>) => {
+    async (
+      content: string,
+      attachments?: Array<{
+        id: string;
+        filename: string;
+        originalName: string;
+        mimeType: string;
+        size: number;
+        storagePath: string;
+      }>,
+    ) => {
       await sendChatMessage(content, attachments);
     },
     [sendChatMessage],

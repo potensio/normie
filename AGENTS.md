@@ -170,7 +170,40 @@ dotenv.config({ path: path.join(__dirname, "..", "..", "..", ".env") });
 
 ---
 
-## 9. Stream Timeout & Reliability
+## 9. Pi Agent Session Management
+
+**Architecture:** Pi Agent handles conversation memory through its built-in session manager.
+
+**Session Storage:**
+
+- Location: `.pi/sessions/{workspaceId}/{chatId}.jsonl`
+- Format: JSONL (JSON Lines) for append-only, crash-safe persistence
+- Managed by: `NormieSessionManager` wrapper around Pi's `SessionManager`
+
+**How It Works:**
+
+1. Each chat gets a unique session file
+2. Pi Agent automatically loads conversation history from the session file
+3. New messages are appended to the session file
+4. No need to manually pass message history - Pi Agent handles it
+
+**Key Files:**
+
+- `apps/server/src/pi/session-manager.ts` - Session file management
+- `apps/server/src/pi/index.ts` - Creates session manager and passes to Pi Agent
+- `apps/server/src/services/context-builder.ts` - Builds system context only (not message history)
+
+**Database vs Session Files:**
+
+- **Database (`messages` table):** User-facing message display, search, export
+- **Session files (`.pi/sessions/`):** AI conversation memory, managed by Pi Agent
+- Both are kept in sync, but serve different purposes
+
+**Important:** Don't manually load message history from DB to pass to Pi Agent - it's redundant and was the old workaround before proper session management was implemented.
+
+---
+
+## 10. Stream Timeout & Reliability
 
 **Problem:** AI streams could hang indefinitely without timeout protection.
 

@@ -81,13 +81,22 @@ export function ChatInputContainer({
   // Handle send with attachments
   const handleSend = useCallback(
     async (message: string) => {
-      // Prepare attachment paths (no file saving needed!)
-      const attachmentPaths = hasAttachments
-        ? attachments.map((a) => ({ path: a.path }))
+      // Prepare full attachment data (not just paths!)
+      const attachmentData = hasAttachments
+        ? attachments.map((a) => ({
+            id: a.id,
+            filename: a.name,
+            originalName: a.name,
+            mimeType: a.isDirectory
+              ? "inode/directory"
+              : "application/octet-stream",
+            size: a.size,
+            storagePath: a.path,
+          }))
         : undefined;
 
-      // Send the message with attachment paths
-      sendMessage(message, attachmentPaths);
+      // Send the message with full attachment data
+      sendMessage(message, attachmentData);
 
       // Clear attachments after sending
       clearAttachments();

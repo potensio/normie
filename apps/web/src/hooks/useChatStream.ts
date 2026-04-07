@@ -53,6 +53,14 @@ interface UseChatStreamReturn {
       model: string;
       workspaceId: string | null;
       userId: string;
+      attachments?: Array<{
+        id: string;
+        filename: string;
+        originalName: string;
+        mimeType: string;
+        size: number;
+        storagePath: string;
+      }>;
     },
     callbacks?: {
       onTitleUpdate?: (title: string) => void;
@@ -139,7 +147,14 @@ export function useChatStream(): UseChatStreamReturn {
         model: string;
         workspaceId: string | null;
         userId: string;
-        attachments?: Array<{ path: string }>;
+        attachments?: Array<{
+          id: string;
+          filename: string;
+          originalName: string;
+          mimeType: string;
+          size: number;
+          storagePath: string;
+        }>;
       },
       callbacks?: {
         onTitleUpdate?: (title: string) => void;
@@ -162,6 +177,7 @@ export function useChatStream(): UseChatStreamReturn {
         id: generateId(),
         role: "user",
         blocks: [{ type: "text", content: content.trim() }],
+        attachments: attachments,
       };
 
       // Add user message
@@ -182,6 +198,11 @@ export function useChatStream(): UseChatStreamReturn {
       setIsStreaming(true);
 
       try {
+        // Convert attachments to paths for API
+        const attachmentPaths = attachments?.map((a) => ({
+          path: a.storagePath,
+        }));
+
         const reader = await chatApi.send({
           content,
           chatId,
@@ -189,7 +210,7 @@ export function useChatStream(): UseChatStreamReturn {
           model,
           workspaceId,
           userId,
-          attachments,
+          attachments: attachmentPaths,
         });
 
         let blocks: MessageBlock[] = [];

@@ -49,11 +49,8 @@ export interface RunPiQueryOptions {
   userId: string;
   /** System prompt from context builder */
   systemPrompt?: string;
-  /** Conversation history with current message (text only - file paths injected) */
-  messages: Array<{
-    role: string;
-    content: string;
-  }>;
+  /** Current user message (conversation history handled by Pi Agent session) */
+  currentMessage: string;
   /** Composio client for workspace integrations */
   composioClient?: unknown;
   /** Abort signal for cancellation */
@@ -139,7 +136,7 @@ export async function* runPiQuery(
     chatId,
     userId,
     systemPrompt,
-    messages,
+    currentMessage,
     composioClient,
     signal,
     sessionId,
@@ -250,6 +247,27 @@ export async function* runPiQuery(
   console.log(`[PiAgent] Model API: ${(piModel as any).api}`);
   console.log(`[PiAgent] Context window: ${piModel.contextWindow} tokens`);
 
+  // Create or load session manager for conversation persistence
+  console.log("[PiAgent] Setting up session manager...");
+  let piSessionManager: any = null;
+
+  try {
+    const { NormieSessionManager } = await import("./session-manager.js");
+    piSessionManager = new NormieSessionManager({
+      workspaceId,
+      chatId,
+    });
+    console.log(
+      `[PiAgent] Session file: ${piSessionManager.getSessionFilePath()}`,
+    );
+    console.log(
+      `[PiAgent] Session persisted: ${piSessionManager.isPersisted()}`,
+    );
+  } catch (error) {
+    console.warn("[PiAgent] Failed to create session manager:", error);
+    // Continue without session persistence
+  }
+
   // Create AgentSession using SDK
   console.log("[PiAgent] Creating AgentSession...");
 
@@ -263,6 +281,7 @@ export async function* runPiQuery(
       thinkingLevel: "medium",
       tools: tools as any,
       customTools: [],
+      sessionManager: piSessionManager?.getPiSessionManager(), // Pass session manager for persistence
     });
 
     session = result.session;
@@ -362,20 +381,14 @@ export async function* runPiQuery(
   };
 
   try {
-    // Build the prompt text from messages
-    // The last message is the current user message
-    const lastUserMessage = messages.filter((m) => m.role === "user").pop();
-
-    if (!lastUserMessage) {
-      throw new Error("No user message found in context");
-    }
-
     // Get text content for logging
-    const contentPreview = lastUserMessage.content.substring(0, 100);
+    const contentPreview = currentMessage.substring(0, 100);
     console.log(`[PiAgent] Sending prompt: "${contentPreview}..."`);
+    console.log(`[PiAgent] Session manager will handle conversation history`);
 
-    // Send prompt to session (all text now - file paths injected)
-    await session.prompt(lastUserMessage.content);
+    // Send prompt to session
+    // Pi Agent's session manager automatically loads conversation history
+    await session.prompt(currentMessage);
 
     // Track last activity for stuck detection
     let lastActivityTime = Date.now();

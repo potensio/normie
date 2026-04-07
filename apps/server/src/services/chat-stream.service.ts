@@ -19,7 +19,7 @@ import {
   resolveCredentials,
   type ResolvedCredentials,
 } from "../pi/credentials.js";
-import { buildFullContext } from "./context-builder.js";
+import { buildSystemContext } from "./context-builder.js";
 import { generateConversationTitle } from "./title-generator.js";
 import {
   getChatById,
@@ -233,6 +233,7 @@ export async function resolveProviderCredentials(
 
 /**
  * Build context for AI query
+ * Returns system prompt only - message history is handled by Pi Agent's session manager
  */
 export async function buildStreamContext(
   db: DbClient,
@@ -242,30 +243,17 @@ export async function buildStreamContext(
   options?: { attachments?: StreamParams["attachments"] },
 ): Promise<{
   systemPrompt: string | null;
-  messages: Array<{
-    role: string;
-    content: string;
-  }>;
 }> {
-  const contextResult = await buildFullContext(
-    workspaceId,
-    chatId,
-    message,
-    db,
-    {
-      maxMessages: 20,
-      pendingAttachments: options?.attachments,
-    },
-  );
+  // Build system context (workspace files, memories, skills)
+  // Note: We don't need message history here - Pi Agent handles that
+  const systemPrompt = await buildSystemContext(workspaceId, db);
 
   console.log("[STREAM] Built context:", {
-    hasSystemPrompt: !!contextResult.systemPrompt,
-    messageCount: contextResult.messages.length,
+    hasSystemPrompt: !!systemPrompt,
   });
 
   return {
-    systemPrompt: contextResult.systemPrompt || null,
-    messages: contextResult.messages,
+    systemPrompt: systemPrompt || null,
   };
 }
 
@@ -490,8 +478,9 @@ export async function streamChat(
     // 4. Save user message
     await saveUserMessage(db, chatId, message, attachments);
 
-    // 5. Build context
-    const { systemPrompt, messages } = await buildStreamContext(
+    // 5. Build system context (workspace files, memories, skills)
+    // Note: Message history is handled by Pi Agent's session manager
+    const { systemPrompt } = await buildStreamContext(
       db,
       context.workspaceId,
       chatId,
@@ -510,6 +499,7 @@ export async function streamChat(
     }
 
     // 7. Stream from Pi Agent
+    // Pi Agent's session manager handles conversation history automatically
     for await (const chunk of runPiQuery({
       provider,
       model,
@@ -517,7 +507,7 @@ export async function streamChat(
       chatId,
       userId,
       systemPrompt: systemPrompt || undefined,
-      messages,
+      currentMessage: message, // Just the current message, not full history
       composioClient,
       signal: effectiveSignal,
       sessionId: context.chat.sessionFilePath || undefined,

@@ -65,13 +65,13 @@ export const MessageItem = memo(function MessageItem({
         transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
         className="flex flex-col gap-0.5 items-end"
       >
-        {/* Attachments */}
+        {/* Attachments - displayed above message bubble */}
         {message.attachments && message.attachments.length > 0 && (
-          <div className="mb-1.5">
+          <div className="mb-2">
             <AttachmentGrid attachments={message.attachments} />
           </div>
         )}
-        
+
         <div className="bg-gradient-to-br from-purple-500 to-purple-600 px-3.5 py-2 rounded-2xl max-w-2xl border border-purple-400/50 shadow-purple">
           <p className="text-sm font-normal text-white leading-relaxed">
             {textContent}
@@ -89,7 +89,8 @@ export const MessageItem = memo(function MessageItem({
   // Check if there's legacy content (for backward compatibility)
   const hasContent = !hasBlocks && message.content;
   // Check if we're at the initial streaming state
-  const isInitialStreaming = isStreaming && !hasBlocks && !hasContent && !message.reasoning;
+  const isInitialStreaming =
+    isStreaming && !hasBlocks && !hasContent && !message.reasoning;
 
   return (
     <motion.div
@@ -114,7 +115,10 @@ export const MessageItem = memo(function MessageItem({
       {/* Legacy: Main Content - for backward compatibility */}
       {hasContent && (
         <div>
-          <AnimatedStream content={message.content!} isStreaming={isStreaming} />
+          <AnimatedStream
+            content={message.content!}
+            isStreaming={isStreaming}
+          />
         </div>
       )}
 
