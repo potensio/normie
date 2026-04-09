@@ -488,18 +488,7 @@ export async function streamChat(
       { attachments },
     );
 
-    // 6. Get Composio client
-    let composioClient: unknown = null;
-    try {
-      const { getComposioClient } =
-        await import("../pi/tools/composio-tools.js");
-      composioClient = getComposioClient();
-      console.log("[STREAM] Composio client initialized successfully");
-    } catch (err) {
-      console.warn("[STREAM] Composio not available:", (err as Error).message);
-    }
-
-    // 7. Stream from Pi Agent
+    // 6. Stream from Pi Agent
     // Pi Agent's session manager handles conversation history automatically
     for await (const chunk of runPiQuery({
       provider,
@@ -509,11 +498,9 @@ export async function streamChat(
       userId,
       systemPrompt: systemPrompt || undefined,
       currentMessage: message, // Just the current message, not full history
-      composioClient,
       signal: effectiveSignal,
       sessionId: context.chat.sessionFilePath || undefined,
       credentials,
-      db,
     })) {
       // Reset watchdog on any activity
       watchdog.reset();

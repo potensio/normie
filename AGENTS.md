@@ -123,7 +123,7 @@ pnpm db:generate  # Generate migration files
 pnpm db:studio    # Drizzle Studio GUI
 ```
 
-**Tables:** `users`, `sessions`, `workspaces`, `workspace_files`, `workspace_members`, `workspace_integrations`, `workspace_skills`, `chats`, `messages`, `memories`, `daily_notes`, `user_api_keys`, `user_preferences`
+**Tables:** `users`, `sessions`, `workspaces`, `workspace_files`, `workspace_members`, `workspace_skills`, `chats`, `messages`, `memories`, `daily_notes`, `user_api_keys`, `user_preferences`
 
 ---
 
@@ -233,75 +233,6 @@ dotenv.config({ path: path.join(__dirname, "..", "..", "..", ".env") });
 - Both are kept in sync, but serve different purposes
 
 **Important:** Don't manually load message history from DB to pass to Pi Agent - it's redundant and was the old workaround before proper session management was implemented.
-
----
-
-## 10. Composio Integration (Meta-Tools Pattern)
-
-**Architecture:** Uses Composio's meta-tools pattern for AI awareness of 1000+ integrations.
-
-**Why Meta-Tools?**
-
-Instead of loading 1000+ tool definitions upfront (which would consume ~55K tokens), we provide just 3 meta-tools that handle discovery, authentication, and execution at runtime. This keeps token usage minimal (~3 tools) while giving AI access to all integrations.
-
-**The 3 Meta-Tools:**
-
-1. **composio_search_tools** - Discovers relevant tools based on natural language queries
-   - AI searches with queries like "create github issue", "send email", "schedule meeting"
-   - Returns 5-10 most relevant tools with schemas and connection status
-   - Handles tool discovery across 1000+ integrations
-
-2. **composio_manage_connections** - Handles OAuth authentication
-   - Checks if integrations are connected
-   - Generates OAuth connection URLs when needed
-   - Provides user-friendly connection instructions
-
-3. **composio_execute_tool** - Executes discovered tools
-   - Takes tool name and parameters from search results
-   - Handles actual API calls to external services
-   - Returns helpful error messages with connection guidance
-
-**Workflow Example:**
-
-```
-User: "Create a GitHub issue for the login bug"
-
-1. AI calls composio_search_tools({ queries: ["create github issue"] })
-   → Returns GITHUB_CREATE_ISSUE tool schema + connection status
-
-2. AI calls composio_execute_tool({
-     tool: "GITHUB_CREATE_ISSUE",
-     parameters: {...}
-   })
-   → If not connected: Returns auth error with guidance
-
-3. AI calls composio_manage_connections({
-     toolkits: ["github"],
-     action: "get_connection_url"
-   })
-   → Returns OAuth URL for user
-
-4. User connects account
-
-5. AI retries composio_execute_tool
-   → Success! Issue created
-```
-
-**Key Files:**
-
-- `apps/server/src/pi/tools/composio-tools.ts` - Meta-tools implementation
-- `apps/server/src/prompts/system.ts` - System prompt with meta-tools guidance
-- `apps/server/src/pi/tools/composio-errors.ts` - Error classification
-
-**Token Efficiency:**
-
-- Old approach: ~1000+ tools loaded = ~55K tokens
-- Meta-tools approach: 3 tools = <1K tokens
-- AI discovers tools on-demand based on user intent
-
-**Supported Integrations:**
-
-Email & Communication, Development & Code, Calendar & Scheduling, Project Management, Documentation & Knowledge, CRM & Sales, Storage & Files, Social Media, Finance, Analytics, Marketing, HR & Recruiting, Design, and 980+ more services.
 
 ---
 

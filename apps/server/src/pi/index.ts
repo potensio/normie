@@ -45,22 +45,18 @@ export interface RunPiQueryOptions {
   workspaceId: string;
   /** Chat ID for session management */
   chatId: string;
-  /** User ID for Composio entity isolation */
+  /** User ID for context */
   userId: string;
   /** System prompt from context builder */
   systemPrompt?: string;
   /** Current user message (conversation history handled by Pi Agent session) */
   currentMessage: string;
-  /** Composio client for workspace integrations */
-  composioClient?: unknown;
   /** Abort signal for cancellation */
   signal?: AbortSignal;
   /** Existing session ID from DB (for resumption) */
   sessionId?: string;
   /** Pre-resolved credentials (for simple API key providers) */
   credentials: ResolvedCredentials;
-  /** Database client for connect_toolkit tool */
-  db?: unknown;
 }
 
 /**
@@ -137,11 +133,9 @@ export async function* runPiQuery(
     userId,
     systemPrompt,
     currentMessage,
-    composioClient,
     signal,
     sessionId,
     credentials,
-    db,
   } = options;
 
   console.log("=".repeat(60));
@@ -180,15 +174,11 @@ export async function* runPiQuery(
 
   // Build workspace tools
   console.log("[PiAgent] Building workspace tools...");
-  console.log(`[PiAgent] Composio client available: ${!!composioClient}`);
   const toolOptions: ToolBuilderOptions = {
     workspaceId,
     userId,
-    composioClient: composioClient as any,
     includeCodingTools: true,
     includeWebTools: true,
-    includeComposioTools: !!composioClient,
-    db: getDb(),
   };
 
   const tools = await buildWorkspaceTools(toolOptions);
@@ -582,7 +572,6 @@ export { EventAdapter } from "./event-adapter.js";
 
 // Re-export tools
 export { buildWorkspaceTools, type ToolBuilderOptions } from "./tools/index.js";
-export { getComposioClient } from "./tools/composio-tools.js";
 
 // Re-export credentials
 export { resolveCredentials, type ResolvedCredentials } from "./credentials.js";

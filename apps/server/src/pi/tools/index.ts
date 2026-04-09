@@ -7,11 +7,6 @@ import {
 } from "@mariozechner/pi-coding-agent";
 import type { AgentTool } from "@mariozechner/pi-agent-core";
 import type { TSchema } from "@sinclair/typebox";
-import {
-  buildComposioTools,
-  getComposioClient,
-  type ComposioToolConfig,
-} from "./composio-tools.js";
 import { webSearchTool, webFetchTool } from "./web-tools.js";
 import path from "path";
 
@@ -118,11 +113,6 @@ function wrapReadTool(originalReadTool: AgentTool): AgentTool {
 }
 
 // Re-export for external use
-export {
-  buildComposioTools,
-  getComposioClient,
-  type ComposioToolConfig,
-} from "./composio-tools.js";
 export { webSearchTool, webFetchTool } from "./web-tools.js";
 export {
   codingTools,
@@ -135,7 +125,17 @@ export {
 /**
  * Tool builder configuration options
  */
-export interface ToolBuilderOptions extends ComposioToolConfig {
+export interface ToolBuilderOptions {
+  /**
+   * Workspace ID for context
+   */
+  workspaceId: string;
+
+  /**
+   * User ID for context
+   */
+  userId: string;
+
   /**
    * Whether to include built-in coding tools (read, write, bash, edit, grep, find, ls)
    * @default true
@@ -155,18 +155,6 @@ export interface ToolBuilderOptions extends ComposioToolConfig {
   includeWebTools?: boolean;
 
   /**
-   * Whether to include Composio integration tools
-   * @default true
-   */
-  includeComposioTools?: boolean;
-
-  /**
-   * Database client for connect_toolkit tool
-   * Required when includeConnectToolkit is true
-   */
-  db?: unknown;
-
-  /**
    * Additional custom tools to include
    */
   customTools?: AgentTool[];
@@ -178,7 +166,6 @@ export interface ToolBuilderOptions extends ComposioToolConfig {
  * Combines:
  * - Pi's built-in coding tools (read, write, bash, edit, grep, find, ls)
  * - Web tools (web_search, web_fetch)
- * - Composio tools (workspace-specific integrations)
  * - Any additional custom tools
  *
  * @example
@@ -186,7 +173,6 @@ export interface ToolBuilderOptions extends ComposioToolConfig {
  * const tools = await buildWorkspaceTools({
  *   workspaceId: 'ws-123',
  *   userId: 'user-456',
- *   composioClient: getComposioClient(),
  * });
  * ```
  */
@@ -194,13 +180,11 @@ export async function buildWorkspaceTools(
   options: ToolBuilderOptions,
 ): Promise<AgentTool[]> {
   const {
+    workspaceId,
     includeCodingTools = true,
     readOnlyMode = false,
     includeWebTools = true,
-    includeComposioTools = true,
-    db,
     customTools = [],
-    ...composioConfig
   } = options;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -240,42 +224,13 @@ export async function buildWorkspaceTools(
     tools.push(webFetchTool as unknown as AgentTool<TSchema>);
   }
 
-  // Add Composio tools for ALL available integrations
-  if (
-    includeComposioTools &&
-    composioConfig.workspaceId &&
-    composioConfig.userId &&
-    composioConfig.composioClient
-  ) {
-    try {
-      // Build tools for ALL toolkits (Composio SDK loads them all)
-      const composioTools = await buildComposioTools(composioConfig);
-
-      if (composioTools.length > 0) {
-        tools.push(...composioTools);
-        console.log(
-          `[ToolSystem] Added ${composioTools.length} Composio tools from all available integrations`,
-        );
-      }
-    } catch (error) {
-      console.error(
-        "[ToolSystem] Error building Composio tools:",
-        error instanceof Error ? error.message : String(error),
-      );
-    }
-  }
-
-  // Add connect_toolkit meta-tool (always available for proactive connection suggestions)
-  // Note: This is now handled by Composio awareness tools
-  // No separate connect_toolkit tool needed
-
   // Add any custom tools
   if (customTools.length > 0) {
     tools.push(...customTools);
   }
 
   console.log(
-    `[ToolSystem] Built ${tools.length} tools for workspace ${composioConfig.workspaceId || "N/A"}`,
+    `[ToolSystem] Built ${tools.length} tools for workspace ${workspaceId}`,
   );
 
   return tools;
