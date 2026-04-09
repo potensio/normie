@@ -103,19 +103,17 @@ Returns 5-10 most relevant tools with their schemas and connection status.`,
     }),
     execute: async (
       _toolCallId: string,
-      params: { queries: string[] },
+      params: unknown,
     ): Promise<AgentToolResult<unknown>> => {
       try {
-        console.log(
-          `[ComposioMetaTools:Search] Searching for tools:`,
-          params.queries,
-        );
+        const { queries } = params as { queries: string[] };
+        console.log(`[ComposioMetaTools:Search] Searching for tools:`, queries);
 
         // Use Composio SDK to search for tools
         // This is a simplified version - in production, you'd use Composio's actual search API
         const results: any[] = [];
 
-        for (const query of params.queries) {
+        for (const query of queries) {
           // Parse query to extract toolkit and action
           const toolkit = extractToolkitFromQuery(query);
 
@@ -165,7 +163,7 @@ Returns 5-10 most relevant tools with their schemas and connection status.`,
           details: {
             action: "composio_search_tools",
             entityId,
-            queriesCount: params.queries.length,
+            queriesCount: queries.length,
             resultsCount: results.length,
           },
         };
@@ -227,22 +225,20 @@ When a tool execution fails due to missing authentication, use this to provide t
     }),
     execute: async (
       _toolCallId: string,
-      params: {
-        toolkits: string[];
-        action?: "check_status" | "get_connection_url";
-      },
+      params: unknown,
     ): Promise<AgentToolResult<unknown>> => {
       try {
-        const action = params.action || "check_status";
-        console.log(
-          `[ComposioMetaTools:Connections] ${action} for:`,
-          params.toolkits,
-        );
+        const { toolkits, action: actionParam } = params as {
+          toolkits: string[];
+          action?: "check_status" | "get_connection_url";
+        };
+        const action = actionParam || "check_status";
+        console.log(`[ComposioMetaTools:Connections] ${action} for:`, toolkits);
 
         const integrations = await getWorkspaceIntegrations(workspaceId);
         const results: any[] = [];
 
-        for (const toolkit of params.toolkits) {
+        for (const toolkit of toolkits) {
           const integration = integrations.find(
             (i) => i.toolkitSlug.toLowerCase() === toolkit.toLowerCase(),
           );
@@ -280,7 +276,7 @@ When a tool execution fails due to missing authentication, use this to provide t
           details: {
             action: "composio_manage_connections",
             entityId,
-            toolkitsCount: params.toolkits.length,
+            toolkitsCount: toolkits.length,
           },
         };
       } catch (error) {
@@ -334,10 +330,11 @@ If execution fails due to missing authentication, use composio_manage_connection
     }),
     execute: async (
       _toolCallId: string,
-      params: { tool: string; parameters: any },
+      params: unknown,
       signal?: AbortSignal,
     ): Promise<AgentToolResult<unknown>> => {
       const startTime = Date.now();
+      const { tool, parameters } = params as { tool: string; parameters: any };
 
       try {
         if (signal?.aborted) {
@@ -350,7 +347,7 @@ If execution fails due to missing authentication, use composio_manage_connection
             ],
             details: {
               action: "composio_execute_tool",
-              tool: params.tool,
+              tool,
               entityId,
               aborted: true,
             },
@@ -358,14 +355,14 @@ If execution fails due to missing authentication, use composio_manage_connection
         }
 
         console.log(
-          `[ComposioMetaTools:Execute] Executing ${params.tool} with params:`,
-          params.parameters,
+          `[ComposioMetaTools:Execute] Executing ${tool} with params:`,
+          parameters,
         );
 
         // Execute via Composio SDK
         const result = await (composioClient as any).tools.execute(
-          params.tool,
-          params.parameters,
+          tool,
+          parameters,
           {
             entityId,
           },
@@ -382,7 +379,7 @@ If execution fails due to missing authentication, use composio_manage_connection
           ],
           details: {
             action: "composio_execute_tool",
-            tool: params.tool,
+            tool,
             entityId,
             executionTime,
             success: true,
@@ -391,16 +388,19 @@ If execution fails due to missing authentication, use composio_manage_connection
       } catch (error) {
         const executionTime = Date.now() - startTime;
         console.error(
-          `[ComposioMetaTools:Execute] Error executing ${params.tool}:`,
+          `[ComposioMetaTools:Execute] Error executing ${tool}:`,
           error,
         );
 
         // Extract toolkit from tool name (e.g., GITHUB_CREATE_ISSUE -> github)
-        const toolkit = params.tool.split("_")[0].toLowerCase();
+        const toolkit = tool.split("_")[0].toLowerCase();
         const classified = classifyComposioError(error, toolkit);
 
         // If it's an auth error, provide helpful guidance
-        if (classified.type === "authentication") {
+        if (
+          classified.type === "connection_expired" ||
+          classified.type === "connection_required"
+        ) {
           return {
             content: [
               {
@@ -410,7 +410,7 @@ If execution fails due to missing authentication, use composio_manage_connection
             ],
             details: {
               action: "composio_execute_tool",
-              tool: params.tool,
+              tool,
               entityId,
               executionTime,
               success: false,
@@ -426,12 +426,12 @@ If execution fails due to missing authentication, use composio_manage_connection
           content: [
             {
               type: "text",
-              text: `${classified.message}\n\nTool: ${params.tool}\nToolkit: ${toolkit}`,
+              text: `${classified.message}\n\nTool: ${tool}\nToolkit: ${toolkit}`,
             },
           ],
           details: {
             action: "composio_execute_tool",
-            tool: params.tool,
+            tool,
             entityId,
             executionTime,
             success: false,

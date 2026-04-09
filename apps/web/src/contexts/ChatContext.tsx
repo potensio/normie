@@ -1,10 +1,17 @@
 /**
- * ChatContext - Stateless orchestrator combining chat hooks
+ * ChatContext - Clean implementation
  *
- * This context does NOT hold state. It only combines hooks and exposes
- * their values through a unified API. All logic is in hooks for testability.
+ * Single source of truth for chat state.
+ * Stream messages are the live state, server messages are loaded on mount.
  */
-import { createContext, useContext, useState, useCallback } from "react";
+import {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useEffect,
+} from "react";
+import { useNavigate, useRouterState } from "@tanstack/react-router";
 import type {
   Chat,
   Message,
@@ -18,19 +25,17 @@ import {
   useChats,
   usePreferences,
   useChatStream,
-  useChatSender,
-  useCurrentChat,
-  useChatNavigation,
   useChatDelete,
 } from "@/hooks";
+import { chatApi } from "@/lib/api";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface ChatContextType {
   // State
   chats: Chat[];
-  currentChat: Chat | null;
+  currentChatId: string | null;
   messages: Message[];
   isLoading: boolean;
-  isFetching: boolean;
   isStreaming: boolean;
   error: Error | null;
   todos: Todo[];
@@ -41,7 +46,6 @@ interface ChatContextType {
 
   // Actions
   createNewChat: () => void;
-  loadChat: (chatId: string) => void;
   deleteChat: (chatId: string) => Promise<void>;
   sendMessage: (
     content: string,
@@ -59,38 +63,25 @@ interface ChatContextType {
   setModel: (model: string) => void;
   toggleThinkingMode: () => void;
   refreshChats: () => Promise<void>;
-  prefetchChat: (chatId: string) => void;
 }
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
 
 export function ChatProvider({ children }: { children: React.ReactNode }) {
-  const { isLoggedIn, currentWorkspace, user, clearAuthState } = useAuth();
+  const { isLoggedIn, currentWorkspace, user } = useAuth();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const routerState = useRouterState();
 
-  // TanStack Query for chats list
+  // Extract chatId from URL
+  const currentChatId = routerState.location.pathname.startsWith("/c/")
+    ? routerState.location.pathname.split("/c/")[1]
+    : null;
+
+  // Chats list
   const { data: chats = [], refetch: refreshChats } = useChats(
     currentWorkspace?.id,
   );
-
-  // NEW: Non-blocking chat navigation
-  const { currentChatId, navigateToChat, navigateToNewChat } =
-    useChatNavigation();
-
-  // NEW: TanStack Query-powered chat loading (instant cached data + background refetch)
-  const {
-    chat: currentChat,
-    messages,
-    todos,
-    toolCalls,
-    isLoading: isLoadingChat,
-    isFetching: isFetchingChat,
-    error: chatError,
-    prefetchChat,
-  } = useCurrentChat({
-    workspaceId: currentWorkspace?.id,
-    chatId: currentChatId,
-    enabled: isLoggedIn,
-  });
 
   // Preferences
   const {
@@ -100,10 +91,10 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     setModel: setModelPreference,
   } = usePreferences();
 
-  // Thinking mode (simple local state)
+  // Thinking mode
   const [thinkingMode, setThinkingMode] = useState<ThinkingMode>("normal");
 
-  // Chat streaming (for new messages)
+  // Chat streaming
   const {
     messages: streamMessages,
     isStreaming,
@@ -112,60 +103,83 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     sendMessage: sendStreamMessage,
     stopStreaming: stopStream,
     reset: resetStream,
+    loadMessages,
   } = useChatStream();
 
-  // Chat delete action
+  // Chat delete
   const { deleteChat: deleteChatAction } = useChatDelete();
 
-  // Combine messages: use stream messages when active, otherwise use loaded chat messages
-  const displayMessages = streamMessages.length > 0 ? streamMessages : messages;
-  const displayTodos = streamTodos.length > 0 ? streamTodos : (todos ?? []);
-  const displayToolCalls =
-    streamToolCalls.length > 0 ? streamToolCalls : (toolCalls ?? []);
+  // Server messages (loaded once when chat changes)
+  const [serverMessages, setServerMessages] = useState<Message[]>([]);
+  const [serverTodos, setServerTodos] = useState<Todo[]>([]);
+  const [serverToolCalls, setServerToolCalls] = useState<ToolCall[]>([]);
+  const [isLoadingChat, setIsLoadingChat] = useState(false);
 
-  // Chat sender (for sending new messages)
-  const { sendMessage: sendChatMessage } = useChatSender({
-    currentChat,
-    workspaceId: currentWorkspace?.id,
-    provider: selectedProvider,
-    model: selectedModel,
-    userId: user?.id,
-    messages: displayMessages,
-    todos: displayTodos,
-    toolCalls: displayToolCalls,
-    isStreaming,
-    sendStreamMessage,
-    setCurrentChat: (chat) => {
-      // Update currentChatId when a new chat is created
-      if (chat && chat.id !== currentChatId) {
-        navigateToChat(chat.id);
-      }
-    },
-  });
+  // Load chat from server when chatId changes
+  useEffect(() => {
+    if (!currentChatId || isStreaming) return;
 
-  // Wrapped actions
+    let cancelled = false;
+    setIsLoadingChat(true);
+
+    chatApi
+      .get(currentChatId)
+      .then((chat) => {
+        if (cancelled) return;
+        setServerMessages(chat.messages || []);
+        setServerTodos(chat.todos || []);
+        setServerToolCalls(chat.toolCalls || []);
+
+        // Load into stream state for continuity
+        loadMessages({
+          messages: chat.messages || [],
+          todos: chat.todos || [],
+          toolCalls: chat.toolCalls || [],
+        });
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error("[ChatContext] Failed to load chat:", err);
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setIsLoadingChat(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentChatId, isStreaming, loadMessages]);
+
+  // Clear server state when leaving a chat
+  useEffect(() => {
+    if (!currentChatId) {
+      setServerMessages([]);
+      setServerTodos([]);
+      setServerToolCalls([]);
+      resetStream();
+    }
+  }, [currentChatId, resetStream]);
+
+  // Display state: always use stream messages (they're loaded from server on mount)
+  const messages = streamMessages;
+  const todos = streamTodos;
+  const toolCalls = streamToolCalls;
+
+  // Actions
   const createNewChat = useCallback(() => {
     resetStream();
-    navigateToNewChat();
-  }, [navigateToNewChat, resetStream]);
-
-  const loadChat = useCallback(
-    (chatId: string) => {
-      resetStream();
-      navigateToChat(chatId);
-    },
-    [navigateToChat, resetStream],
-  );
+    navigate({ to: "/" });
+  }, [navigate, resetStream]);
 
   const deleteChat = useCallback(
     async (chatId: string) => {
       await deleteChatAction(chatId);
-      // Navigate to new chat after delete if current was deleted
       if (currentChatId === chatId) {
-        navigateToNewChat();
+        navigate({ to: "/" });
       }
     },
-    [deleteChatAction, currentChatId, navigateToNewChat],
+    [deleteChatAction, currentChatId, navigate],
   );
 
   const sendMessage = useCallback(
@@ -180,18 +194,73 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         storagePath: string;
       }>,
     ) => {
-      await sendChatMessage(content, attachments);
+      if (!content.trim() || isStreaming || !user?.id) return;
+
+      // Generate chatId if new chat
+      const chatId = currentChatId || crypto.randomUUID();
+      const chatTitle =
+        content.length > 30 ? content.substring(0, 30) + "..." : content;
+
+      // Navigate to chat immediately if new
+      if (!currentChatId) {
+        navigate({ to: "/c/$chatId", params: { chatId } });
+      }
+
+      // Start streaming
+      const result = await sendStreamMessage(
+        {
+          content,
+          chatId,
+          chatTitle,
+          provider: selectedProvider,
+          model: selectedModel,
+          workspaceId: currentWorkspace?.id || null,
+          userId: user.id,
+          attachments,
+        },
+        {
+          onTitleUpdate: (title) => {
+            // Update chat list with new title
+            queryClient.setQueryData(
+              ["chats", "list", currentWorkspace?.id],
+              (old: any) => {
+                if (!old?.chats) return old;
+                return {
+                  ...old,
+                  chats: old.chats.map((chat: any) =>
+                    chat.id === chatId ? { ...chat, title } : chat,
+                  ),
+                };
+              },
+            );
+          },
+        },
+      );
+
+      // Refresh chat list after completion
+      if (result) {
+        await refreshChats();
+      }
     },
-    [sendChatMessage],
+    [
+      currentChatId,
+      isStreaming,
+      user,
+      selectedProvider,
+      selectedModel,
+      currentWorkspace,
+      navigate,
+      sendStreamMessage,
+      queryClient,
+      refreshChats,
+    ],
   );
 
-  // Stop streaming wrapper
   const stopStreaming = useCallback(async () => {
     if (!isStreaming || !currentChatId) return;
     await stopStream(currentChatId, selectedProvider);
   }, [isStreaming, currentChatId, selectedProvider, stopStream]);
 
-  // Provider/model setters
   const setProvider = useCallback(
     (provider: Provider) => {
       setProviderPreference(provider);
@@ -210,26 +279,19 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     setThinkingMode((prev) => (prev === "normal" ? "extended" : "normal"));
   }, []);
 
-  // Combined loading state:
-  // - isLoading: true only on first load when no cached data (shows skeleton)
-  // - isFetching: true during any fetch including background refetch (subtle indicator)
-  const isLoading = isLoadingChat && !currentChat;
-
   const value: ChatContextType = {
     chats,
-    currentChat,
-    messages: displayMessages,
-    isLoading,
-    isFetching: isFetchingChat,
+    currentChatId,
+    messages,
+    isLoading: isLoadingChat,
     isStreaming,
-    error: chatError,
-    todos: displayTodos,
-    toolCalls: displayToolCalls,
+    error: null,
+    todos,
+    toolCalls,
     selectedProvider,
     selectedModel,
     thinkingMode,
     createNewChat,
-    loadChat,
     deleteChat,
     sendMessage,
     stopStreaming,
@@ -239,7 +301,6 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     refreshChats: async () => {
       await refreshChats();
     },
-    prefetchChat,
   };
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;
