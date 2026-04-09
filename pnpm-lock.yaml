@@ -72,9 +72,6 @@ importers:
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.2.7
         version: 0.2.92(zod@3.25.76)
-      '@composio/core':
-        specifier: ^0.6.8
-        version: 0.6.8(ws@8.20.0)(zod@3.25.76)
       '@mariozechner/pi-agent-core':
         specifier: ^0.65.0
         version: 0.65.0(@modelcontextprotocol/sdk@1.29.0(zod@3.25.76))(ws@8.20.0)(zod@3.25.76)
@@ -532,19 +529,6 @@ packages:
 
   '@borewit/text-codec@0.2.2':
     resolution: {integrity: sha512-DDaRehssg1aNrH4+2hnj1B7vnUGEjU6OIlyRdkMd0aUdIUvKXrJfXsy8LVtXAy7DRvYVluWbMspsRhz2lcW0mQ==}
-
-  '@composio/client@0.1.0-alpha.62':
-    resolution: {integrity: sha512-MUBawDp6Uw85m3T0ZtPUSTe9v4SPa0K/Ey3ADZQ/k1NkWsin0oGWhrB/i9hMzndRobijHmBw6xgnFCwjU1B9MQ==}
-
-  '@composio/core@0.6.8':
-    resolution: {integrity: sha512-kqRD/XxON4FJoerf5ccleNsiJgB/wxE21hz3b1w8v/fb1yIoSZ9edRoWjTJ+UihO7HtdL1bbsf6DuLUp6W+e4g==}
-    peerDependencies:
-      zod: ^3.25 || ^4
-
-  '@composio/json-schema-to-zod@0.1.20':
-    resolution: {integrity: sha512-d4V34itLrUWG/VBh7ciznKcxF/T22MBLHmuEzHoX0zsBOHsUmjYz5qtDh20S2p3FE+HHvLZxpXiv8yfdd4yI+Q==}
-    peerDependencies:
-      zod: '>=3.25.76 <5'
 
   '@develar/schema-utils@2.6.5':
     resolution: {integrity: sha512-0cp4PsWQ/9avqTVMCtZ+GirikIA36ikvjtHweU4/j8yLtgObI0+JUPhYFScgwlteveGB1rt3Cm8UhN04XayDig==}
@@ -2048,9 +2032,6 @@ packages:
 
   '@types/http-errors@2.0.5':
     resolution: {integrity: sha512-r8Tayk8HJnX0FztbZN7oVqGccWgw98T/0neJphO91KkmOzug1KkofZURD4UaD5uH8AqcFLfdPErnBod0u71/qg==}
-
-  '@types/json-schema@7.0.15':
-    resolution: {integrity: sha512-5+fP8P8MFNC+AyZCDxrB2pkZFPGzqQWUzpSeuuVLvm8VMcorNYavBqoFcxK8bQz4Qsbn4oUEEem4wDLfcysGHA==}
 
   '@types/jsonwebtoken@9.0.10':
     resolution: {integrity: sha512-asx5hIG9Qmf/1oStypjanR7iKTv0gXQ1Ov/jfrX6kS/EO0OFni8orbmGCn0672NHR3kXHwpAwR+B368ZGN/2rA==}
@@ -4633,9 +4614,6 @@ packages:
     resolution: {integrity: sha512-vYt7UD1U9Wg6138shLtLOvdAu+8DsC/ilFtEVHcH+wydcSpNE20AfSOduf6MkRFahL5FY7X1oU7nKVZFtfq8Fg==}
     engines: {node: '>=6'}
 
-  pusher-js@8.5.0:
-    resolution: {integrity: sha512-V7uzGi9bqOOOyM/6IkJdpFyjGZj7llz1v0oWnYkZKcYLvbz6VcHVLmzKqkvegjuMumpfIEKGLmWHwFb39XFCpw==}
-
   qs@6.15.0:
     resolution: {integrity: sha512-mAZTtNCeetKMH+pSjrb76NAM8V9a05I9aBZOHztWy/UqcJdQYNsf59vrRKWnojAT9Y+GbIvoTBC++CPHqpDBhQ==}
     engines: {node: '>=0.6'}
@@ -5152,9 +5130,6 @@ packages:
     resolution: {integrity: sha512-5C1sg4USs1lfG0GFb2RLXsdpXqBSEhAaA/0kPL01wxzpMqLILNxIxIOKiILz+cdg/pLnOUxFYOR5yhHU666wbw==}
     engines: {node: '>=18.0.0'}
     hasBin: true
-
-  tweetnacl@1.0.3:
-    resolution: {integrity: sha512-6rt+RN7aOi1nGMyC4Xa5DdYiukl2UWCbcJft7YhxReBGQD7OAM8Pbxw6YMo4r2diNEA8FEmu32YOn9rhaiE5yw==}
 
   type-fest@0.13.1:
     resolution: {integrity: sha512-34R7HTnG0XIJcBSn5XhDd7nNFPRcXYRZrBB2O2jdKqYODldSzBAqzsWoZYYvduky73toYS/ESqxPvkDf/F0XMg==}
@@ -6009,26 +5984,6 @@ snapshots:
       '@babel/helper-validator-identifier': 7.28.5
 
   '@borewit/text-codec@0.2.2': {}
-
-  '@composio/client@0.1.0-alpha.62': {}
-
-  '@composio/core@0.6.8(ws@8.20.0)(zod@3.25.76)':
-    dependencies:
-      '@composio/client': 0.1.0-alpha.62
-      '@composio/json-schema-to-zod': 0.1.20(zod@3.25.76)
-      '@types/json-schema': 7.0.15
-      chalk: 4.1.2
-      openai: 6.33.0(ws@8.20.0)(zod@3.25.76)
-      pusher-js: 8.5.0
-      semver: 7.7.4
-      zod: 3.25.76
-      zod-to-json-schema: 3.25.2(zod@3.25.76)
-    transitivePeerDependencies:
-      - ws
-
-  '@composio/json-schema-to-zod@0.1.20(zod@3.25.76)':
-    dependencies:
-      zod: 3.25.76
 
   '@develar/schema-utils@2.6.5':
     dependencies:
@@ -7411,8 +7366,6 @@ snapshots:
   '@types/http-cache-semantics@4.2.0': {}
 
   '@types/http-errors@2.0.5': {}
-
-  '@types/json-schema@7.0.15': {}
 
   '@types/jsonwebtoken@9.0.10':
     dependencies:
@@ -10454,10 +10407,6 @@ snapshots:
 
   punycode@2.3.1: {}
 
-  pusher-js@8.5.0:
-    dependencies:
-      tweetnacl: 1.0.3
-
   qs@6.15.0:
     dependencies:
       side-channel: 1.1.0
@@ -11144,8 +11093,6 @@ snapshots:
       get-tsconfig: 4.13.7
     optionalDependencies:
       fsevents: 2.3.3
-
-  tweetnacl@1.0.3: {}
 
   type-fest@0.13.1:
     optional: true
