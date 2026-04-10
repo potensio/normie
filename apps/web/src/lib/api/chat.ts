@@ -1,7 +1,5 @@
 /**
  * Chat API - All chat-related API calls
- *
- * Uses window.authAPI for chat CRUD and window.electronAPI for streaming.
  */
 import type { Chat, Provider } from "@normie/types";
 
@@ -43,10 +41,9 @@ export const chatApi = {
   },
 
   /**
-   * Send a message and get a streaming response
-   * Returns an object with a read() method for streaming
+   * Send a message and get a response
    */
-  send: async (params: {
+  sendMessage: async (params: {
     content: string;
     chatId: string;
     provider: Provider;
@@ -54,40 +51,31 @@ export const chatApi = {
     workspaceId: string | null;
     userId: string;
     attachments?: Array<{ path: string }>;
-  }): Promise<{ read: () => Promise<{ done: boolean; value?: string }> }> => {
-    const {
-      content,
-      chatId,
-      provider,
-      model,
-      workspaceId,
-      userId,
-      attachments,
-    } = params;
+  }): Promise<{ chatId: string; title?: string; response: string }> => {
+    if (!window.authAPI) throw new Error("Auth API not available");
 
-    if (!window.electronAPI) {
-      throw new Error("Electron API not available");
-    }
-
-    const response = await window.electronAPI.sendMessage(
-      content,
-      chatId,
-      provider,
-      model,
-      workspaceId,
-      userId,
-      attachments,
+    const response = await fetch(
+      `http://localhost:3001/api/chats/${params.chatId}/send`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          message: params.content,
+          provider: params.provider,
+          model: params.model,
+          workspaceId: params.workspaceId,
+          attachments: params.attachments,
+        }),
+      },
     );
 
-    return response.getReader();
-  },
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || "Failed to send message");
+    }
 
-  /**
-   * Abort an ongoing chat stream
-   */
-  abort: async (chatId: string, provider: Provider): Promise<void> => {
-    window.electronAPI?.abortCurrentRequest();
-    await window.electronAPI?.stopQuery(chatId, provider);
+    return response.json();
   },
 
   /**

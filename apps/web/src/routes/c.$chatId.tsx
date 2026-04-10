@@ -5,7 +5,7 @@
  * The chatId parameter identifies which chat to load.
  */
 import { createFileRoute } from "@tanstack/react-router";
-import { useChat } from "@/contexts/ChatContext";
+import { useCurrentChat, useChat } from "@/hooks";
 import { ChatInputContainer, MessageList } from "@/components/chat";
 
 export const Route = createFileRoute("/c/$chatId")({
@@ -21,7 +21,13 @@ export const Route = createFileRoute("/c/$chatId")({
 
 function ChatComponent() {
   const { chatId } = Route.useParams();
-  const { messages, isStreaming } = useChat();
+  const { isPending: isSending } = useChat();
+
+  // Only fetch chat after a short delay to allow mutation to complete
+  // This prevents 404 errors in console for new chats
+  const { data: chat, isLoading } = useCurrentChat(chatId);
+
+  const messages = chat?.messages || [];
 
   return (
     <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden bg-white">
@@ -35,7 +41,7 @@ function ChatComponent() {
       {/* Messages */}
       <MessageList
         messages={messages}
-        isStreaming={isStreaming}
+        isStreaming={isSending || isLoading}
         chatId={chatId}
       />
 

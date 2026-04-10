@@ -280,32 +280,6 @@ export function createGetApiKeyCallback(
     }
 
     // Return the resolved API key
-    // This callback may be called multiple times during a long-running
-    // agent run, allowing for credential refresh if needed
     return credentials.apiKey;
   };
-}
-
-/**
- * Build stream options for the Agent.
- *
- * Combines the resolved credentials with any provider-specific options
- * that should be passed to the stream function.
- */
-export function buildStreamOptions(
-  credentials: ResolvedCredentials,
-): Record<string, unknown> {
-  const options: Record<string, unknown> = {};
-
-  // Add API key if present (for simple providers)
-  if (credentials.apiKey) {
-    options.apiKey = credentials.apiKey;
-  }
-
-  // Merge provider-specific options
-  if (credentials.streamOptions) {
-    Object.assign(options, credentials.streamOptions);
-  }
-
-  return options;
 }

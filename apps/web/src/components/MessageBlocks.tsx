@@ -1,9 +1,9 @@
 /**
  * MessageBlocks - Renderer for interleaved message blocks
  *
+ * NEW: No memo, no optimization - just render immediately
  * Renders blocks in order: TextBlock → AnimatedStream, ToolBlock → CompactToolCall
  */
-import { memo } from "react";
 import type { MessageBlock } from "@normie/types";
 import { AnimatedStream } from "./chat/AnimatedStream";
 import { CompactToolCall } from "./CompactToolCall";
@@ -13,10 +13,7 @@ interface MessageBlocksProps {
   isStreaming: boolean;
 }
 
-export const MessageBlocks = memo(function MessageBlocks({
-  blocks,
-  isStreaming,
-}: MessageBlocksProps) {
+export function MessageBlocks({ blocks, isStreaming }: MessageBlocksProps) {
   if (!blocks || blocks.length === 0) return null;
 
   return (
@@ -52,4 +49,4 @@ export const MessageBlocks = memo(function MessageBlocks({
       })}
     </div>
   );
-});
+}

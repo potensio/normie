@@ -31,13 +31,13 @@ import {
   verifyChatAccess,
   verifyChatWriteAccess,
   updateMessageMetadata,
+  processMessage,
   type CreateChatInput,
   type UpdateChatInput,
   type SwitchModelInput,
   type CreateBranchInput,
   type AddMessageInput,
 } from "../services/chat.service.js";
-import { streamChatWithRequest } from "../services/chat-stream.service.js";
 
 const router = Router();
 
@@ -222,21 +222,13 @@ router.post(
 );
 
 // ============================================
-// STREAM CHAT
+// SEND MESSAGE
 // ============================================
 router.post(
-  "/:chatId/stream",
+  "/:chatId/send",
   asyncHandler(async (req: Request, res: Response) => {
     const chatId = getStringParam(req.params.chatId);
     const { message, provider, model, workspaceId, attachments } = req.body;
-
-    console.log("[STREAM] Request:", {
-      chatId,
-      provider,
-      model,
-      messagePreview: message?.substring(0, 50),
-      hasAttachments: !!attachments?.length,
-    });
 
     // Validate required fields
     if (!message || !provider || !model) {
@@ -244,24 +236,21 @@ router.post(
     }
 
     if (!workspaceId) {
-      throw new ValidationError("workspaceId is required for new chats");
+      throw new ValidationError("workspaceId is required");
     }
 
-    // Stream the chat
-    await streamChatWithRequest(
-      getDb(),
-      {
-        chatId,
-        message,
-        provider,
-        model,
-        workspaceId,
-        userId: req.userId!,
-        attachments,
-      },
-      req,
-      res,
-    );
+    // Process the message
+    const result = await processMessage(getDb(), {
+      chatId,
+      message,
+      provider,
+      model,
+      workspaceId,
+      userId: req.userId!,
+      attachments,
+    });
+
+    res.json(result);
   }),
 );
 

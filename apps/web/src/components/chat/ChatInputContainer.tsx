@@ -1,11 +1,13 @@
 /**
  * ChatInputContainer - Container component
  *
- * Connects to context and fetches providers, passes data to presentational ChatInput.
+ * Connects to hooks and fetches providers, passes data to presentational ChatInput.
  */
 
 import { useEffect, useMemo, useCallback } from "react";
-import { useChat } from "@/contexts/ChatContext";
+import { useNavigate, useRouterState } from "@tanstack/react-router";
+import { useAuth } from "@/contexts/AuthContext";
+import { useChat, usePreferences } from "@/hooks";
 import { ChatInput } from "./ChatInput";
 import { useProviders, type ModelOption } from "@/hooks/useProviders";
 import { useAttachments } from "@/hooks/useAttachments";
@@ -16,16 +18,25 @@ export function ChatInputContainer({
 }: {
   variant?: "home" | "chat";
 }) {
+  const navigate = useNavigate();
+  const routerState = useRouterState();
+  const { user, currentWorkspace } = useAuth();
+
+  // Extract chatId from URL
+  const currentChatId = routerState.location.pathname.startsWith("/c/")
+    ? routerState.location.pathname.split("/c/")[1]
+    : null;
+
+  // Preferences
   const {
-    sendMessage,
-    stopStreaming,
-    isStreaming,
-    selectedProvider,
-    selectedModel,
+    provider: selectedProvider,
+    model: selectedModel,
     setProvider,
     setModel,
-    currentChat,
-  } = useChat();
+  } = usePreferences();
+
+  // Send message mutation
+  const { mutateAsync: sendMessage, isPending: isStreaming } = useChat();
 
   // Attachment handling
   const {
@@ -81,6 +92,17 @@ export function ChatInputContainer({
   // Handle send with attachments
   const handleSend = useCallback(
     async (message: string) => {
+      if (!message.trim() || isStreaming || !user?.id) return;
+
+      // Generate chatId if new chat
+      const chatId = currentChatId || crypto.randomUUID();
+      const isNewChat = !currentChatId;
+
+      // Navigate immediately for new chats (optimistic navigation)
+      if (isNewChat) {
+        navigate({ to: "/c/$chatId", params: { chatId } });
+      }
+
       // Prepare full attachment data (not just paths!)
       const attachmentData = hasAttachments
         ? attachments.map((a) => ({
@@ -96,13 +118,45 @@ export function ChatInputContainer({
         : undefined;
 
       // Send the message with full attachment data
-      sendMessage(message, attachmentData);
+      try {
+        await sendMessage({
+          content: message,
+          chatId,
+          provider: selectedProvider,
+          model: selectedModel,
+          workspaceId: currentWorkspace?.id || null,
+          userId: user.id,
+          attachments: attachmentData,
+        });
+      } catch (error) {
+        console.error("[ChatInput] Failed to send message:", error);
+        // If it's a new chat and failed, navigate back to home
+        if (isNewChat) {
+          navigate({ to: "/" });
+        }
+      }
 
       // Clear attachments after sending
       clearAttachments();
     },
-    [sendMessage, clearAttachments, hasAttachments, attachments],
+    [
+      currentChatId,
+      isStreaming,
+      user,
+      selectedProvider,
+      selectedModel,
+      currentWorkspace,
+      navigate,
+      sendMessage,
+      clearAttachments,
+      hasAttachments,
+      attachments,
+    ],
   );
+
+  const stopStreaming = useCallback(() => {
+    // No-op for non-streaming
+  }, []);
 
   // Ensure selected model is valid for the provider when models load (initial load)
   useEffect(() => {

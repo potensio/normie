@@ -9,24 +9,12 @@
 export { useLogin, useLogout, useRegister } from "./useAuth";
 
 // Chats
-export {
-  useChats,
-  useCurrentChat,
-  useChatDelete,
-  useChatSender,
-  chatKeys,
-} from "./useChats";
-export { useChatStream } from "./useChatStream";
+export { useChats, useChatDelete } from "./useChats";
+export { useCurrentChat } from "./useCurrentChat";
+export { useChat } from "./useChat";
 
 // UI
 export { useSmartScroll } from "./useSmartScroll";
-
-// Workspaces
-export {
-  useWorkspaces,
-  useCreateWorkspace,
-  workspaceKeys,
-} from "./useWorkspaces";
 
 // Preferences
 export { usePreferences } from "./usePreferences";
@@ -34,7 +22,6 @@ export { usePreferences } from "./usePreferences";
 // Providers
 export {
   useProviders,
-  providerKeys,
   type ModelOption,
   type UseProvidersReturn,
 } from "./useProviders";
@@ -44,6 +31,5 @@ export {
   useApiKeys,
   useSaveApiKey,
   useDeleteApiKey,
-  apiKeyKeys,
   type ApiKeyInfo,
 } from "./useApiKeys";

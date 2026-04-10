@@ -17,13 +17,12 @@ import {
   type AgentSession,
   type AgentSessionEvent,
 } from "@mariozechner/pi-coding-agent";
+import { existsSync, mkdirSync } from "fs";
+import path from "path";
 import { loadPiConfig, validatePiConfig, PROVIDER_ALIAS } from "./config.js";
 import { BEDROCK_MODELS } from "./bedrock-models.js";
-import { EventAdapter } from "./event-adapter.js";
 import { buildWorkspaceTools, type ToolBuilderOptions } from "./tools/index.js";
 import type { ResolvedCredentials } from "./credentials.js";
-import type { StreamChunk } from "@normie/types";
-import { getDb } from "../db/index.js";
 
 export interface CreatePiSessionParams {
   workspaceId: string;
@@ -112,19 +111,17 @@ function createAuthStorageWithCredentials(
 }
 
 /**
- * Run a query with Pi Agent and stream events through the EventAdapter.
+ * Run a query with Pi Agent and return the complete response.
  *
  * This is the main entry point for chat queries. It:
  * 1. Validates credentials (from DB for user keys, from env for owner keys)
  * 2. Creates AuthStorage with injected credentials (for simple API key providers)
  * 3. Creates AgentSession via SDK
- * 4. Subscribes to events and streams responses
+ * 4. Waits for complete response
  *
- * @yields StreamChunk events compatible with the frontend SSE format
+ * @returns Complete response text
  */
-export async function* runPiQuery(
-  options: RunPiQueryOptions,
-): AsyncGenerator<StreamChunk> {
+export async function runPiQuery(options: RunPiQueryOptions): Promise<string> {
   const {
     provider,
     model,
@@ -148,6 +145,25 @@ export async function* runPiQuery(
   console.log(`[PiAgent] Session: ${sessionId || "new"}`);
   console.log("=".repeat(60));
 
+  // Change working directory to isolate from project codebase
+  const originalCwd = process.cwd();
+  const isolatedWorkDir = path.join(
+    originalCwd,
+    ".pi",
+    "workspaces",
+    workspaceId,
+  );
+
+  // Ensure isolated directory exists
+  if (!existsSync(isolatedWorkDir)) {
+    mkdirSync(isolatedWorkDir, { recursive: true });
+  }
+
+  process.chdir(isolatedWorkDir);
+  console.log(
+    `[PiAgent] Changed cwd to isolated workspace: ${isolatedWorkDir}`,
+  );
+
   // Resolve Pi provider name (handle aliases)
   const piProvider = PROVIDER_ALIAS[provider] || provider;
   console.log(`[PiAgent] Pi provider ID: ${piProvider}`);
@@ -155,22 +171,12 @@ export async function* runPiQuery(
   // Validate credentials
   if (!credentials.configured) {
     console.error("[PiAgent] ERROR: Credentials not configured");
-    yield {
-      type: "error",
-      message: credentials.error || `No API key configured for ${provider}`,
-      provider,
-    };
-    return;
+    throw new Error(
+      credentials.error || `No API key configured for ${provider}`,
+    );
   }
 
   console.log(`[PiAgent] Credentials source: ${credentials.source}`);
-
-  // Create event adapter
-  const eventAdapter = new EventAdapter({
-    provider,
-    chatId,
-    sessionId,
-  });
 
   // Build workspace tools
   console.log("[PiAgent] Building workspace tools...");
@@ -183,7 +189,6 @@ export async function* runPiQuery(
 
   const tools = await buildWorkspaceTools(toolOptions);
   console.log(`[PiAgent] Built ${tools.length} tools`);
-  console.log(`[PiAgent] Tool names: ${tools.map((t) => t.name).join(", ")}`);
 
   // Create AuthStorage with injected credentials
   // For bedrock, use "bedrock" as auth provider (not "amazon-bedrock")
@@ -221,23 +226,14 @@ export async function* runPiQuery(
   }
 
   // Get model from registry
-  // For bedrock, always use "bedrock" as the provider name (not "amazon-bedrock")
   console.log("[PiAgent] Getting model from registry...");
   const registryProvider = provider === "amazon-bedrock" ? "bedrock" : provider;
   const piModel = modelRegistry.find(registryProvider, model);
   if (!piModel) {
     console.error(`[PiAgent] Model not found: ${registryProvider}/${model}`);
-    yield {
-      type: "error",
-      message: `Model '${registryProvider}/${model}' not found`,
-      provider,
-    };
-    return;
+    throw new Error(`Model '${registryProvider}/${model}' not found`);
   }
   console.log(`[PiAgent] Model: ${piModel.id} (${piModel.name})`);
-  console.log(`[PiAgent] Model provider: ${piModel.provider}`);
-  console.log(`[PiAgent] Model API: ${(piModel as any).api}`);
-  console.log(`[PiAgent] Context window: ${piModel.contextWindow} tokens`);
 
   // Create or load session manager for conversation persistence
   console.log("[PiAgent] Setting up session manager...");
@@ -264,7 +260,6 @@ export async function* runPiQuery(
   console.log("[PiAgent] Creating AgentSession...");
 
   let session: AgentSession;
-  let extensionsResult: any;
 
   try {
     const result = await createAgentSession({
@@ -273,258 +268,67 @@ export async function* runPiQuery(
       thinkingLevel: "medium",
       tools: tools as any,
       customTools: [],
-      sessionManager: piSessionManager?.getPiSessionManager(), // Pass session manager for persistence
+      sessionManager: piSessionManager?.getPiSessionManager(),
     });
 
     session = result.session;
-    extensionsResult = result.extensionsResult;
 
     console.log("[PiAgent] AgentSession created successfully");
-    console.log(
-      `[PiAgent] Extensions loaded: ${extensionsResult?.extensions?.length || 0}`,
-    );
-
-    if (result.modelFallbackMessage) {
-      console.log(`[PiAgent] Model fallback: ${result.modelFallbackMessage}`);
-    }
   } catch (error) {
     console.error("[PiAgent] Failed to create AgentSession:", error);
-    yield {
-      type: "error",
-      message: `Failed to initialize agent: ${(error as Error).message}`,
-      provider,
-    };
-    return;
+    throw new Error(`Failed to initialize agent: ${(error as Error).message}`);
   }
 
-  // Queue to collect events from the session
-  const eventQueue: StreamChunk[] = [];
-  let resolveEventPromise:
-    | ((value: IteratorResult<StreamChunk>) => void)
-    | null = null;
+  // Collect response
+  let completeResponse = "";
   let done = false;
   let errorMessage: string | null = null;
 
   // Subscribe to session events
   const unsubscribe = session.subscribe((event: AgentSessionEvent) => {
-    console.log(`[PiAgent:Event] Received: ${event.type}`);
-
-    // Log tool execution events specially
-    if (event.type === "tool_execution_start") {
-      const te = event as any;
-      console.log(
-        `[PiAgent:Event] TOOL EXECUTION START - ID: ${te.toolCallId}`,
-      );
-    }
-    if (event.type === "tool_execution_end") {
-      const te = event as any;
-      console.log(
-        `[PiAgent:Event] TOOL EXECUTION END - ID: ${te.toolCallId}, Error: ${te.isError}`,
-      );
-    }
-
-    // Log full event for debugging
-    if (event.type === "agent_end") {
-      console.log(
-        `[PiAgent:Event] Full agent_end event:`,
-        JSON.stringify(event, null, 2),
-      );
-    }
     if (event.type === "message_update") {
-      const me = event as any;
-      // Log toolcall_start events
-      if (me.assistantMessageEvent?.type === "toolcall_start") {
-        console.log(`[PiAgent:Event] TOOLCALL START - Tool requested!`);
+      const messageEvent = (event as any).assistantMessageEvent;
+      if (messageEvent.type === "text_delta") {
+        completeResponse += messageEvent.delta;
       }
     }
 
-    // Translate to StreamChunk
-    const chunk = translateSessionEvent(event, eventAdapter);
-
-    if (chunk) {
-      if (resolveEventPromise) {
-        resolveEventPromise({ value: chunk, done: false });
-        resolveEventPromise = null;
-      } else {
-        eventQueue.push(chunk);
-      }
-    }
-
-    // Check for completion
     if (event.type === "agent_end") {
-      console.log("[PiAgent:Event] Agent completed");
       done = true;
-      if (resolveEventPromise) {
-        resolveEventPromise({ value: undefined as any, done: true });
-        resolveEventPromise = null;
+      if ("error" in event && event.error) {
+        errorMessage = String(event.error);
       }
-    }
-
-    // Track errors
-    if (event.type === "agent_end" && "error" in event && event.error) {
-      errorMessage = String(event.error);
     }
   });
 
-  // Yield initial connected event
-  yield {
-    type: "connected",
-    message: "Processing request...",
-  };
-
   try {
-    // Get text content for logging
-    const contentPreview = currentMessage.substring(0, 100);
-    console.log(`[PiAgent] Sending prompt: "${contentPreview}..."`);
-    console.log(`[PiAgent] Session manager will handle conversation history`);
-
-    // Send prompt to session
-    // Pi Agent's session manager automatically loads conversation history
+    console.log(`[PiAgent] Sending prompt...`);
     await session.prompt(currentMessage);
 
-    // Track last activity for stuck detection
-    let lastActivityTime = Date.now();
-    const stuckThresholdMs = 60000; // 60 seconds
-
-    // Yield events as they come
+    // Wait for completion
     while (!done) {
-      // Check for abort
       if (signal?.aborted) {
         console.log("[PiAgent] Request aborted by client");
         await session.abort();
-        yield eventAdapter.translateAbort();
-        break;
+        throw new Error("Request aborted");
       }
-
-      // Check for stuck stream (no events for 60s)
-      const timeSinceActivity = Date.now() - lastActivityTime;
-      if (timeSinceActivity > stuckThresholdMs) {
-        console.error(
-          `[PiAgent] ⚠️ Stream stuck - no events for ${Math.round(timeSinceActivity / 1000)}s`,
-        );
-        throw new Error(
-          `Stream timeout - no response from model for ${Math.round(timeSinceActivity / 1000)}s`,
-        );
-      }
-
-      // Check if there's an event in the queue
-      if (eventQueue.length > 0) {
-        lastActivityTime = Date.now(); // Reset activity timer
-        yield eventQueue.shift()!;
-        continue;
-      }
-
-      // Wait for the next event
-      const eventPromise = new Promise<IteratorResult<StreamChunk>>(
-        (resolve) => {
-          resolveEventPromise = resolve;
-        },
-      );
-
-      // Wait with timeout to allow abort checking and stuck detection
-      const timeoutPromise = new Promise<IteratorResult<StreamChunk>>(
-        (resolve) => {
-          setTimeout(() => {
-            if (!done) {
-              resolve({ value: undefined as any, done: false });
-            }
-          }, 1000); // Increased to 1s to reduce CPU usage
-        },
-      );
-
-      const result = await Promise.race([eventPromise, timeoutPromise]);
-
-      if (result.done) {
-        done = true;
-        break;
-      }
-
-      if (result.value) {
-        lastActivityTime = Date.now(); // Reset activity timer
-        yield result.value;
-      }
+      await new Promise((resolve) => setTimeout(resolve, 100));
     }
 
-    // Yield any remaining events
-    while (eventQueue.length > 0) {
-      yield eventQueue.shift()!;
-    }
-
-    // Check for errors
     if (errorMessage) {
-      console.error("[PiAgent] Agent ended with error:", errorMessage);
-      yield {
-        type: "error",
-        message: errorMessage,
-        provider,
-      };
+      throw new Error(errorMessage);
     }
 
     console.log("[PiAgent] Query completed successfully");
+    return completeResponse;
   } catch (error) {
     console.error("[PiAgent] Query error:", error);
-
-    if ((error as Error).name === "AbortError" || signal?.aborted) {
-      console.log("[PiAgent] Query aborted");
-      yield eventAdapter.translateAbort();
-    } else {
-      yield {
-        type: "error",
-        message: (error as Error).message,
-        provider,
-      };
-    }
+    throw error;
   } finally {
     unsubscribe();
-    console.log("[PiAgent] Session cleanup complete");
+    process.chdir(originalCwd);
+    console.log("[PiAgent] Restored original cwd");
     console.log("=".repeat(60));
-  }
-}
-
-/**
- * Translate AgentSessionEvent to StreamChunk format.
- */
-function translateSessionEvent(
-  event: AgentSessionEvent,
-  adapter: EventAdapter,
-): StreamChunk | null {
-  // Log all event details for debugging
-  console.log(`[PiAgent:Translate] Event type: ${event.type}`);
-
-  switch (event.type) {
-    case "agent_start":
-      return {
-        type: "session_init",
-        session_id: adapter.sessionId || "new",
-        provider: adapter.provider,
-      };
-
-    case "message_update":
-      console.log("[PiAgent:Translate] Processing message_update");
-      return adapter.translate(event as any);
-
-    case "tool_execution_start":
-    case "tool_execution_end":
-      return adapter.translate(event as any);
-
-    case "agent_end":
-      // Check for error in agent_end
-      if ("error" in event && event.error) {
-        console.log("[PiAgent:Translate] Agent ended with error:", event.error);
-      }
-      return { type: "done", provider: adapter.provider };
-
-    case "turn_start":
-    case "turn_end":
-    case "message_start":
-    case "message_end":
-      return null;
-
-    default:
-      console.log(
-        `[PiAgent:Event] Unhandled event type: ${(event as any).type}`,
-      );
-      return null;
   }
 }
 
@@ -566,9 +370,6 @@ export {
   validatePiConfig,
   getEnabledProviders,
 } from "./config.js";
-
-// Re-export event adapter for consumers
-export { EventAdapter } from "./event-adapter.js";
 
 // Re-export tools
 export { buildWorkspaceTools, type ToolBuilderOptions } from "./tools/index.js";

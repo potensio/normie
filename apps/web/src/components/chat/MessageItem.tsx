@@ -1,10 +1,9 @@
 /**
  * MessageItem - Individual message rendering with animations
  *
- * Streaming: Text accumulates via RAF-batched updates for smooth 60fps appearance.
- * Blocks: Interleaved text and tool calls rendered in stream order.
+ * NEW: No memo - render immediately for smooth streaming
  */
-import { useMemo, memo } from "react";
+import { useMemo } from "react";
 import { motion } from "framer-motion";
 import type { Message, TextBlock } from "@normie/types";
 import { ThinkingBlock } from "../ThinkingBlock";
@@ -43,7 +42,7 @@ interface MessageItemProps {
   isStreaming?: boolean;
 }
 
-export const MessageItem = memo(function MessageItem({
+export function MessageItem({
   message,
   isStreaming = false,
 }: MessageItemProps) {
@@ -151,4 +150,4 @@ export const MessageItem = memo(function MessageItem({
       )}
     </motion.div>
   );
-});
+}
