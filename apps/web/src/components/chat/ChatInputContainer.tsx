@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useCallback } from "react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { useAuth } from "@/contexts/AuthContext";
-import { useChat, usePreferences } from "@/hooks";
+import { useChatStream, usePreferences } from "@/hooks";
 import { ChatInput } from "./ChatInput";
 import { useProviders, type ModelOption } from "@/hooks/useProviders";
 import { useAttachments } from "@/hooks/useAttachments";
@@ -35,8 +35,8 @@ export function ChatInputContainer({
     setModel,
   } = usePreferences();
 
-  // Send message mutation
-  const { mutateAsync: sendMessage, isPending: isStreaming } = useChat();
+  // Streaming hook
+  const { isStreaming, startStream, stopStream } = useChatStream();
 
   // Attachment handling
   const {
@@ -117,14 +117,14 @@ export function ChatInputContainer({
           }))
         : undefined;
 
-      // Send the message with full attachment data
+      // Start streaming
       try {
-        await sendMessage({
-          content: message,
+        await startStream({
+          message,
           chatId,
           provider: selectedProvider,
           model: selectedModel,
-          workspaceId: currentWorkspace?.id || null,
+          workspaceId: currentWorkspace?.id || "",
           userId: user.id,
           attachments: attachmentData,
         });
@@ -147,16 +147,16 @@ export function ChatInputContainer({
       selectedModel,
       currentWorkspace,
       navigate,
-      sendMessage,
+      startStream,
       clearAttachments,
       hasAttachments,
       attachments,
     ],
   );
 
-  const stopStreaming = useCallback(() => {
-    // No-op for non-streaming
-  }, []);
+  const handleStop = useCallback(() => {
+    stopStream();
+  }, [stopStream]);
 
   // Ensure selected model is valid for the provider when models load (initial load)
   useEffect(() => {
@@ -190,7 +190,7 @@ export function ChatInputContainer({
       onSelectProvider={handleSelectProvider}
       onSelectModel={setModel}
       onSend={handleSend}
-      onStop={stopStreaming}
+      onStop={handleStop}
       isStreaming={isStreaming}
       isLoadingProviders={isLoading}
       attachments={attachments}

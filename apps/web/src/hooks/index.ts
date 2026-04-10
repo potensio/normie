@@ -12,6 +12,7 @@ export { useLogin, useLogout, useRegister } from "./useAuth";
 export { useChats, useChatDelete } from "./useChats";
 export { useCurrentChat } from "./useCurrentChat";
 export { useChat } from "./useChat";
+export { useChatStream } from "./useChatStream";
 
 // UI
 export { useSmartScroll } from "./useSmartScroll";

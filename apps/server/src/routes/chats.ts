@@ -6,7 +6,7 @@
  */
 
 import { Router, Request, Response } from "express";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 import { requireAuth, requireWorkspaceAccess } from "../auth/index.js";
 import { getDb } from "../db/index.js";
 import * as schema from "../db/schema.js";
@@ -222,7 +222,7 @@ router.post(
 );
 
 // ============================================
-// SEND MESSAGE
+// SEND MESSAGE (Non-streaming - for compatibility)
 // ============================================
 router.post(
   "/:chatId/send",
@@ -251,6 +251,116 @@ router.post(
     });
 
     res.json(result);
+  }),
+);
+
+// ============================================
+// STREAM MESSAGE (SSE)
+// ============================================
+router.post(
+  "/:chatId/stream",
+  asyncHandler(async (req: Request, res: Response) => {
+    const chatId = getStringParam(req.params.chatId);
+    const { message, provider, model, workspaceId, attachments } = req.body;
+
+    // Validate required fields
+    if (!message || !provider || !model) {
+      throw new ValidationError("message, provider, and model are required");
+    }
+
+    if (!workspaceId) {
+      throw new ValidationError("workspaceId is required");
+    }
+
+    // Verify workspace access (not chat access, since chat might not exist yet)
+    const [workspace] = await getDb()
+      .select()
+      .from(schema.workspaces)
+      .where(eq(schema.workspaces.id, workspaceId));
+
+    if (!workspace) {
+      throw new NotFoundError("Workspace");
+    }
+
+    // Check if user has access to workspace
+    if (workspace.ownerId !== req.userId) {
+      const [membership] = await getDb()
+        .select()
+        .from(schema.workspaceMembers)
+        .where(
+          and(
+            eq(schema.workspaceMembers.workspaceId, workspaceId),
+            eq(schema.workspaceMembers.userId, req.userId!),
+          ),
+        );
+
+      if (!membership) {
+        throw new ForbiddenError("Access denied");
+      }
+
+      if (membership.role === "viewer") {
+        throw new ForbiddenError("Viewers cannot send messages");
+      }
+    }
+
+    // Set SSE headers
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+
+    // Send connection event
+    res.write(`data: ${JSON.stringify({ type: "connected" })}\n\n`);
+    // Flush immediately
+    if (typeof (res as any).flush === "function") {
+      (res as any).flush();
+    }
+
+    try {
+      // Import streaming service
+      const { processMessageStream } =
+        await import("../services/chat-stream.service.js");
+
+      // Process message with streaming
+      await processMessageStream(
+        getDb(),
+        {
+          chatId,
+          message,
+          provider,
+          model,
+          workspaceId,
+          userId: req.userId!,
+          attachments,
+        },
+        (event: any) => {
+          // Stream events to client
+          res.write(`data: ${JSON.stringify(event)}\n\n`);
+          // CRITICAL: Flush immediately to prevent buffering
+          if (typeof (res as any).flush === "function") {
+            (res as any).flush();
+          }
+        },
+      );
+
+      // Send completion event
+      res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
+      if (typeof (res as any).flush === "function") {
+        (res as any).flush();
+      }
+      res.end();
+    } catch (error) {
+      console.error("[Chat:Stream] Error:", error);
+      res.write(
+        `data: ${JSON.stringify({ type: "error", message: String(error) })}\n\n`,
+      );
+      res.end();
+    }
+
+    // Handle client disconnect
+    req.on("close", () => {
+      console.log(`[Chat:Stream] Client disconnected: ${chatId}`);
+    });
   }),
 );
 
