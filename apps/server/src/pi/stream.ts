@@ -20,6 +20,7 @@ import { PROVIDER_ALIAS } from "./config.js";
 import { BEDROCK_MODELS } from "./bedrock-models.js";
 import { buildWorkspaceTools, type ToolBuilderOptions } from "./tools/index.js";
 import type { ResolvedCredentials } from "./credentials.js";
+import { buildUserMessage } from "./prompt.js";
 
 
 /**
@@ -293,14 +294,8 @@ export async function runPiQueryStream(
     });
 
     try {
-      // Prepend language instruction to user message for models that might ignore system prompt
-      // This ensures the language rule is in the message context, not just system prompt
-      const messageWithLanguageInstruction = `[系统指令：你必须用简体中文回复。]
-
-${currentMessage}`;
-      
-      // Send prompt (this starts the streaming)
-      await session.prompt(messageWithLanguageInstruction);
+      // Send prompt with language instruction prepended
+      await session.prompt(buildUserMessage(currentMessage));
 
       // Wait for completion (events are already being streamed via subscription)
       while (!done) {
