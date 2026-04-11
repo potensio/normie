@@ -23,8 +23,10 @@ import workspaceRoutes from "./routes/workspaces.js";
 import chatRoutes from "./routes/chats.js";
 import apiKeyRoutes from "./routes/api-keys.js";
 import { skillsRouter } from "./routes/skills.js";
+import composioRoutes from "./routes/composio.js";
 import * as schema from "./db/schema.js";
 import { initializePiAgent, getEnabledProviders } from "./pi/index.js";
+// Composio integration is initialized on-demand via isComposioConfigured()
 import { loadPiConfig } from "./pi/config.js";
 import { getProviders, getModels } from "@mariozechner/pi-ai";
 import type { PiProviderInfo, PiModel } from "@normie/types";
@@ -95,6 +97,7 @@ app.use("/api/workspaces", workspaceRoutes);
 app.use("/api/chats", chatRoutes);
 app.use("/api/api-keys", apiKeyRoutes);
 app.use("/api", skillsRouter);
+app.use("/api/composio", composioRoutes);
 
 // ============================================
 // LEGACY CHAT ENDPOINT (deprecated - use Pi Agent instead)
@@ -207,6 +210,8 @@ async function startServer() {
 
     // Initialize Pi Agent
     await initializePiAgent();
+
+    // Composio is initialized on-demand when first used
 
     // Start server
     const server = app.listen(PORT, () => {

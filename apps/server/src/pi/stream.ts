@@ -21,13 +21,14 @@ import { BEDROCK_MODELS } from "./bedrock-models.js";
 import { buildWorkspaceTools, type ToolBuilderOptions } from "./tools/index.js";
 import type { ResolvedCredentials } from "./credentials.js";
 import { buildUserMessage } from "./prompt.js";
+import { isComposioConfigured } from "./composio/index.js";
 
 
 /**
  * Pi Agent event for streaming
  */
 export interface PiStreamEvent {
-  type: "message_update" | "agent_end" | "tool_call" | "thinking";
+  type: "message_update" | "agent_end" | "tool_call" | "thinking" | "auth_required";
   assistantMessageEvent?: {
     type: "text_delta";
     delta: string;
@@ -39,6 +40,14 @@ export interface PiStreamEvent {
     status: "running" | "success" | "error";
     result?: unknown;
     error?: string;
+  };
+  /** Auth required event - user needs to connect an account */
+  authRequired?: {
+    toolkitSlug: string;
+    toolkitName: string;
+    authUrl: string;
+    connectionRequestId: string;
+    message: string;
   };
   content?: string;
   error?: string;
@@ -159,6 +168,24 @@ export async function runPiQueryStream(
 
     const tools = await buildWorkspaceTools(toolOptions);
 
+    // Prepare custom tools (Composio meta-tools)
+    let customTools: any[] = [];
+
+    // Add Composio meta-tools (for autonomous tool discovery)
+    console.log("[PiAgent:Stream] Composio configured:", isComposioConfigured());
+    console.log("[PiAgent:Stream] COMPOSIO_API_KEY exists:", !!process.env.COMPOSIO_API_KEY);
+    if (isComposioConfigured()) {
+      try {
+        const { getComposioMetaTools } = await import("./composio/index.js");
+        // Use workspaceId as Composio userId - 1 workspace = 1 set of connections
+        const composioTools = getComposioMetaTools(workspaceId);
+        customTools = composioTools;
+        console.log("[PiAgent:Stream] Added Composio meta-tools for autonomous tool discovery", composioTools.length, "tools");
+      } catch (error) {
+        console.warn("[PiAgent:Stream] Failed to load Composio meta-tools:", error);
+      }
+    }
+
     // Create AuthStorage
     const authProvider = provider === "amazon-bedrock" ? "bedrock" : provider;
     const authStorage = createAuthStorageWithCredentials(
@@ -209,12 +236,15 @@ export async function runPiQueryStream(
     await loader.reload();
 
     // Create Agent Session
+    console.log("[PiAgent:Stream] Built-in tools:", tools.length, "-", tools.map((t: any) => t.name).join(", "));
+    console.log("[PiAgent:Stream] Custom tools:", customTools.length, "-", customTools.map((t: any) => t.name).join(", "));
+    
     const result = await createAgentSession({
       authStorage,
       model: piModel,
       thinkingLevel: "medium",
       tools: tools as any,
-      customTools: [],
+      customTools: customTools as any,
       sessionManager: piSessionManager?.getPiSessionManager(),
       resourceLoader: loader,
     });
@@ -271,6 +301,23 @@ export async function runPiQueryStream(
           "Error:",
           toolEvent.isError,
         );
+        
+        // Check if tool result indicates auth required
+        const result = toolEvent.result;
+        if (result?.details?.reason === "auth_required" && result?.details?.toolkitSlug) {
+          // Emit auth_required event
+          onEvent({
+            type: "auth_required",
+            authRequired: {
+              toolkitSlug: result.details.toolkitSlug,
+              toolkitName: result.details.toolkitSlug,
+              authUrl: "", // Will be filled by client
+              connectionRequestId: "",
+              message: `You need to connect your ${result.details.toolkitSlug} account.`,
+            },
+          });
+        }
+        
         onEvent({
           type: "tool_call",
           toolCall: {

@@ -25,7 +25,7 @@ import { eq } from "drizzle-orm";
  * SSE Event types
  */
 export interface StreamEvent {
-  type: "text" | "tool" | "thinking" | "done" | "error";
+  type: "text" | "tool" | "thinking" | "done" | "error" | "auth_required";
   content?: string;
 
   // Tool-specific fields
@@ -35,6 +35,15 @@ export interface StreamEvent {
   toolStatus?: "running" | "success" | "error";
   toolResult?: unknown;
   toolError?: string;
+
+  // Auth required fields
+  authRequired?: {
+    toolkitSlug: string;
+    toolkitName: string;
+    authUrl: string;
+    connectionRequestId: string;
+    message: string;
+  };
 
   error?: string;
 }
@@ -175,6 +184,14 @@ export async function processMessageStream(
         onEvent({
           type: "thinking",
           content: piEvent.content,
+        });
+      }
+
+      // Handle auth required from Composio tools
+      if (piEvent.type === "auth_required" && piEvent.authRequired) {
+        onEvent({
+          type: "auth_required",
+          authRequired: piEvent.authRequired,
         });
       }
     },
