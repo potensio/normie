@@ -19,6 +19,8 @@ import { resolveCredentials } from "../pi/credentials.js";
 import { buildSystemContext } from "./context-builder.js";
 import { generateConversationTitle } from "./title-generator.js";
 import { runPiQueryStream, type PiStreamEvent } from "../pi/stream.js";
+import * as schema from "../db/schema.js";
+import { eq } from "drizzle-orm";
 
 /**
  * SSE Event types
@@ -26,8 +28,15 @@ import { runPiQueryStream, type PiStreamEvent } from "../pi/stream.js";
 export interface StreamEvent {
   type: "text" | "tool" | "thinking" | "done" | "error";
   content?: string;
+
+  // Tool-specific fields
+  toolCallId?: string;
   toolName?: string;
-  toolStatus?: "running" | "completed" | "failed";
+  toolInput?: Record<string, unknown>;
+  toolStatus?: "running" | "success" | "error";
+  toolResult?: unknown;
+  toolError?: string;
+
   error?: string;
 }
 
@@ -84,8 +93,14 @@ export async function processMessageStream(
   // Build system context
   const systemPrompt = await buildSystemContext(workspaceId, db);
 
-  // Collect full response for DB
+  // Collect full response and blocks for DB
   let fullResponse = "";
+  const blocks: Array<{
+    type: "text" | "tool";
+    content?: string;
+    toolCall?: any;
+  }> = [];
+  let currentTextBlock: { type: "text"; content: string } | null = null;
 
   // Run Pi Agent query with streaming
   await runPiQueryStream(
@@ -106,6 +121,14 @@ export async function processMessageStream(
         const delta = piEvent.assistantMessageEvent.delta;
         fullResponse += delta;
 
+        // Accumulate text in current text block
+        if (!currentTextBlock) {
+          currentTextBlock = { type: "text", content: delta };
+          blocks.push(currentTextBlock);
+        } else {
+          currentTextBlock.content += delta;
+        }
+
         onEvent({
           type: "text",
           content: delta,
@@ -113,10 +136,43 @@ export async function processMessageStream(
       }
 
       if (piEvent.type === "tool_call" && piEvent.toolCall) {
+        // Tool call interrupts text, start new text block after tool
+        currentTextBlock = null;
+
+        // Find existing tool block or create new one
+        const existingToolIndex = blocks.findIndex(
+          (b) => b.type === "tool" && b.toolCall?.id === piEvent.toolCall!.id,
+        );
+
+        const toolBlock = {
+          type: "tool" as const,
+          toolCall: {
+            id: piEvent.toolCall.id,
+            name: piEvent.toolCall.name,
+            input: piEvent.toolCall.input || {},
+            status: piEvent.toolCall.status,
+            result: piEvent.toolCall.result,
+            startTime: Date.now(),
+            errorMessage: piEvent.toolCall.error,
+          },
+        };
+
+        if (existingToolIndex >= 0) {
+          // Update existing tool block
+          blocks[existingToolIndex] = toolBlock;
+        } else {
+          // Add new tool block
+          blocks.push(toolBlock);
+        }
+
         onEvent({
           type: "tool",
+          toolCallId: piEvent.toolCall.id,
           toolName: piEvent.toolCall.name,
+          toolInput: piEvent.toolCall.input,
           toolStatus: piEvent.toolCall.status,
+          toolResult: piEvent.toolCall.result,
+          toolError: piEvent.toolCall.error,
         });
       }
 
@@ -129,9 +185,19 @@ export async function processMessageStream(
     },
   );
 
-  // Save assistant response
+  // Save assistant response with blocks in metadata
   if (fullResponse) {
-    await addAssistantMessage(db, chatId, fullResponse);
+    const messageRecord = await addAssistantMessage(db, chatId, fullResponse);
+
+    // Store blocks in metadata
+    if (blocks.length > 0) {
+      await db
+        .update(schema.messages)
+        .set({
+          metadata: { blocks },
+        })
+        .where(eq(schema.messages.id, messageRecord.id));
+    }
 
     // Generate title after first exchange
     const messageCount = await getChatMessageCount(db, chatId);

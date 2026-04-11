@@ -106,7 +106,16 @@ router.get(
     // Verify access
     await verifyChatAccess(getDb(), chatId, req.userId!);
 
-    res.json({ ...chat, messages });
+    // Transform messages to include blocks from metadata
+    const messagesWithBlocks = messages.map((msg) => {
+      const metadata = msg.metadata as any;
+      return {
+        ...msg,
+        blocks: metadata?.blocks || undefined,
+      };
+    });
+
+    res.json({ ...chat, messages: messagesWithBlocks });
   }),
 );
 

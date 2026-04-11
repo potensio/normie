@@ -106,12 +106,12 @@ export function MessageItem({
         />
       )}
 
-      {/* New: Message blocks - interleaved text and tools */}
+      {/* Message blocks - interleaved text and tools (streaming) */}
       {hasBlocks && (
         <MessageBlocks blocks={message.blocks!} isStreaming={isStreaming} />
       )}
 
-      {/* Legacy: Main Content - for backward compatibility */}
+      {/* Plain content - messages loaded from database */}
       {hasContent && (
         <div>
           <AnimatedStream

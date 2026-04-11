@@ -28,8 +28,12 @@ export interface PiStreamEvent {
     delta: string;
   };
   toolCall?: {
+    id: string;
     name: string;
-    status: "running" | "completed" | "failed";
+    input?: Record<string, unknown>;
+    status: "running" | "success" | "error";
+    result?: unknown;
+    error?: string;
   };
   content?: string;
   error?: string;
@@ -232,12 +236,38 @@ export async function runPiQueryStream(
       // Stream tool calls
       if (event.type === "tool_execution_start") {
         const toolEvent = event as any;
-        console.log("[PiAgent:Stream] Tool call:", toolEvent.toolName);
+        console.log(
+          "[PiAgent:Stream] Tool execution start:",
+          toolEvent.toolCallId,
+          toolEvent.toolName,
+        );
         onEvent({
           type: "tool_call",
           toolCall: {
+            id: toolEvent.toolCallId || `tool-${Date.now()}`,
             name: toolEvent.toolName || "unknown",
+            input: toolEvent.input,
             status: "running",
+          },
+        });
+      }
+
+      if (event.type === "tool_execution_end") {
+        const toolEvent = event as any;
+        console.log(
+          "[PiAgent:Stream] Tool execution end:",
+          toolEvent.toolCallId,
+          "Error:",
+          toolEvent.isError,
+        );
+        onEvent({
+          type: "tool_call",
+          toolCall: {
+            id: toolEvent.toolCallId || `tool-${Date.now()}`,
+            name: toolEvent.toolName || "unknown",
+            status: toolEvent.isError ? "error" : "success",
+            result: toolEvent.result,
+            error: toolEvent.error,
           },
         });
       }

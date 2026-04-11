@@ -16,21 +16,21 @@ export type Provider = PiProvider | string;
 
 // Pi model catalog types
 export interface PiModel {
-  id: string;           // e.g., 'claude-opus-4-5'
-  name: string;         // Display name
-  provider: string;     // Provider ID
+  id: string; // e.g., 'claude-opus-4-5'
+  name: string; // Display name
+  provider: string; // Provider ID
   contextWindow: number;
   maxTokens: number;
-  reasoning?: boolean;  // Supports extended thinking
+  reasoning?: boolean; // Supports extended thinking
   cost?: {
-    input: number;      // Per 1M tokens
+    input: number; // Per 1M tokens
     output: number;
   };
 }
 
 export interface PiProviderInfo {
-  id: string;           // e.g., 'anthropic'
-  name: string;         // Display name 'Anthropic'
+  id: string; // e.g., 'anthropic'
+  name: string; // Display name 'Anthropic'
   models: PiModel[];
 }
 
@@ -141,9 +141,9 @@ export interface Workspace {
 
 // Connection action types (for Composio integration)
 export type ConnectionActionType =
-  | 'connection_required'
-  | 'connection_expired'
-  | 'connection_initiated';
+  | "connection_required"
+  | "connection_expired"
+  | "connection_initiated";
 
 export interface ConnectionToolResult {
   type: ConnectionActionType;
@@ -157,13 +157,13 @@ export interface ConnectionToolResult {
 
 // Composio error types
 export type ComposioErrorType =
-  | 'connection_required'
-  | 'connection_expired'
-  | 'rate_limited'
-  | 'service_unavailable'
-  | 'validation_error'
-  | 'permission_denied'
-  | 'unknown_error';
+  | "connection_required"
+  | "connection_expired"
+  | "rate_limited"
+  | "service_unavailable"
+  | "validation_error"
+  | "permission_denied"
+  | "unknown_error";
 
 export interface ComposioToolError {
   type: ComposioErrorType;
@@ -188,7 +188,12 @@ export type StreamChunk =
       id: string;
       provider: string;
     }
-  | { type: "tool_result"; result: unknown; tool_use_id: string; provider: string }
+  | {
+      type: "tool_result";
+      result: unknown;
+      tool_use_id: string;
+      provider: string;
+    }
   | { type: "connection_action"; data: ConnectionToolResult }
   | { type: "done"; provider: string }
   | { type: "error"; message: string; provider?: string }

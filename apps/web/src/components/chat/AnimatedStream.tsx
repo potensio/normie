@@ -1,10 +1,8 @@
 /**
- * AnimatedStream - Simple streaming without memo or throttling
+ * AnimatedStream - Clean streaming text display
  *
- * NEW APPROACH:
- * - No memo - render immediately on every prop change
- * - No RAF throttling - let React handle batching
- * - Trust that backend sends small chunks frequently
+ * Renders markdown content with a blinking cursor during streaming.
+ * Uses a simple text cursor (█) that blinks via CSS animation.
  */
 import { MarkdownRenderer } from "./MarkdownRenderer";
 
@@ -19,7 +17,7 @@ export function AnimatedStream({
   isStreaming,
   className = "",
 }: AnimatedStreamProps) {
-  // For completed messages, use the full MarkdownRenderer
+  // For completed messages, render without cursor
   if (!isStreaming) {
     return (
       <div className={className}>
@@ -28,13 +26,15 @@ export function AnimatedStream({
     );
   }
 
-  // For streaming, render immediately with cursor
+  // For streaming, append a blinking cursor character
+  // This ensures it appears inline with the text
+  const contentWithCursor = content + " █";
+
   return (
     <div className={className}>
-      <div className="streaming-markdown animate-fade-in-subtle">
-        <MarkdownRenderer content={content} />
+      <div className="streaming-text">
+        <MarkdownRenderer content={contentWithCursor} />
       </div>
-      <span className="streaming-cursor-coral" />
     </div>
   );
 }
