@@ -1,9 +1,9 @@
 /**
  * Resource Access Middleware
- * 
+ *
  * Reusable middleware for loading and authorizing access to resources
- * (chats, workspaces, memories, etc.)
- * 
+ * (chats, workspaces, etc.)
+ *
  * This centralizes the repeated pattern of:
  * 1. Load resource from DB
  * 2. Check if it exists
@@ -11,11 +11,11 @@
  * 4. Attach to req for downstream handlers
  */
 
-import type { Request, Response, NextFunction } from 'express';
-import { eq, and } from 'drizzle-orm';
-import { getDb } from '../db/index.js';
-import * as schema from '../db/schema.js';
-import { NotFoundError, ForbiddenError, ValidationError } from './errors.js';
+import type { Request, Response, NextFunction } from "express";
+import { eq, and } from "drizzle-orm";
+import { getDb } from "../db/index.js";
+import * as schema from "../db/schema.js";
+import { NotFoundError, ForbiddenError, ValidationError } from "./errors.js";
 
 // ============================================
 // Type Extensions
@@ -28,7 +28,6 @@ declare global {
     interface Request {
       // Loaded resources
       chat?: typeof schema.chats.$inferSelect;
-      memory?: typeof schema.memories.$inferSelect;
       // workspaceRole is already declared in auth/types.ts
     }
   }
@@ -45,12 +44,12 @@ declare global {
 export async function loadWorkspace(
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> {
   const workspaceId = req.params.workspaceId || req.body.workspaceId;
-  
+
   if (!workspaceId) {
-    throw new ValidationError('Workspace ID required');
+    throw new ValidationError("Workspace ID required");
   }
 
   const db = getDb();
@@ -60,7 +59,7 @@ export async function loadWorkspace(
     .where(eq(schema.workspaces.id, workspaceId));
 
   if (!workspace) {
-    throw new NotFoundError('Workspace');
+    throw new NotFoundError("Workspace");
   }
 
   req.workspace = workspace;
@@ -74,16 +73,16 @@ export async function loadWorkspace(
 export async function requireWorkspaceAccess(
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> {
   const workspaceId = req.params.workspaceId || req.body.workspaceId;
-  
+
   if (!workspaceId) {
-    throw new ValidationError('Workspace ID required');
+    throw new ValidationError("Workspace ID required");
   }
 
   const db = getDb();
-  
+
   // Load workspace
   const [workspace] = await db
     .select()
@@ -91,7 +90,7 @@ export async function requireWorkspaceAccess(
     .where(eq(schema.workspaces.id, workspaceId));
 
   if (!workspace) {
-    throw new NotFoundError('Workspace');
+    throw new NotFoundError("Workspace");
   }
 
   req.workspace = workspace;
@@ -107,16 +106,18 @@ export async function requireWorkspaceAccess(
   const [membership] = await db
     .select()
     .from(schema.workspaceMembers)
-    .where(and(
-      eq(schema.workspaceMembers.workspaceId, workspaceId),
-      eq(schema.workspaceMembers.userId, req.userId!)
-    ));
+    .where(
+      and(
+        eq(schema.workspaceMembers.workspaceId, workspaceId),
+        eq(schema.workspaceMembers.userId, req.userId!),
+      ),
+    );
 
   if (!membership) {
-    throw new ForbiddenError('Access denied to this workspace');
+    throw new ForbiddenError("Access denied to this workspace");
   }
 
-  req.workspaceRole = membership.role as 'admin' | 'member' | 'viewer';
+  req.workspaceRole = membership.role as "admin" | "member" | "viewer";
   next();
 }
 
@@ -126,15 +127,15 @@ export async function requireWorkspaceAccess(
 export function requireWorkspaceWriteAccess(
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): void {
   if (req.isWorkspaceOwner) {
     next();
     return;
   }
 
-  if (req.workspaceRole === 'viewer') {
-    throw new ForbiddenError('Viewers cannot perform this action');
+  if (req.workspaceRole === "viewer") {
+    throw new ForbiddenError("Viewers cannot perform this action");
   }
 
   next();
@@ -146,10 +147,10 @@ export function requireWorkspaceWriteAccess(
 export function requireWorkspaceOwner(
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): void {
   if (!req.isWorkspaceOwner) {
-    throw new ForbiddenError('Only workspace owner can perform this action');
+    throw new ForbiddenError("Only workspace owner can perform this action");
   }
   next();
 }
@@ -165,12 +166,12 @@ export function requireWorkspaceOwner(
 export async function loadChat(
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> {
   const chatId = req.params.chatId;
-  
+
   if (!chatId || Array.isArray(chatId)) {
-    throw new ValidationError('Chat ID required');
+    throw new ValidationError("Chat ID required");
   }
 
   const db = getDb();
@@ -180,7 +181,7 @@ export async function loadChat(
     .where(eq(schema.chats.id, chatId));
 
   if (!chat) {
-    throw new NotFoundError('Chat');
+    throw new NotFoundError("Chat");
   }
 
   req.chat = chat;
@@ -194,7 +195,7 @@ export async function loadChat(
 export async function requireChatAccess(
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> {
   const chat = req.chat!;
   const db = getDb();
@@ -205,9 +206,9 @@ export async function requireChatAccess(
       .select()
       .from(schema.workspaces)
       .where(eq(schema.workspaces.id, chat.workspaceId));
-    
+
     if (!workspace) {
-      throw new NotFoundError('Workspace');
+      throw new NotFoundError("Workspace");
     }
     req.workspace = workspace;
   }
@@ -225,16 +226,18 @@ export async function requireChatAccess(
   const [membership] = await db
     .select()
     .from(schema.workspaceMembers)
-    .where(and(
-      eq(schema.workspaceMembers.workspaceId, workspace.id),
-      eq(schema.workspaceMembers.userId, req.userId!)
-    ));
+    .where(
+      and(
+        eq(schema.workspaceMembers.workspaceId, workspace.id),
+        eq(schema.workspaceMembers.userId, req.userId!),
+      ),
+    );
 
   if (!membership) {
-    throw new ForbiddenError('Access denied to this chat');
+    throw new ForbiddenError("Access denied to this chat");
   }
 
-  req.workspaceRole = membership.role as 'admin' | 'member' | 'viewer';
+  req.workspaceRole = membership.role as "admin" | "member" | "viewer";
   next();
 }
 
@@ -244,95 +247,17 @@ export async function requireChatAccess(
 export function requireChatWriteAccess(
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): void {
   if (req.isWorkspaceOwner) {
     next();
     return;
   }
 
-  if (req.workspaceRole === 'viewer') {
-    throw new ForbiddenError('Viewers cannot modify chats');
+  if (req.workspaceRole === "viewer") {
+    throw new ForbiddenError("Viewers cannot modify chats");
   }
 
-  next();
-}
-
-// ============================================
-// Memory Middleware
-// ============================================
-
-/**
- * Load memory by ID from params
- */
-export async function loadMemory(
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<void> {
-  const memoryId = req.params.memoryId;
-  
-  if (!memoryId || Array.isArray(memoryId)) {
-    throw new ValidationError('Memory ID required');
-  }
-
-  const db = getDb();
-  const [memory] = await db
-    .select()
-    .from(schema.memories)
-    .where(eq(schema.memories.id, memoryId));
-
-  if (!memory) {
-    throw new NotFoundError('Memory');
-  }
-
-  req.memory = memory;
-  next();
-}
-
-/**
- * Require access to memory's workspace
- */
-export async function requireMemoryAccess(
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<void> {
-  const memory = req.memory!;
-  const db = getDb();
-
-  // Load workspace
-  const [workspace] = await db
-    .select()
-    .from(schema.workspaces)
-    .where(eq(schema.workspaces.id, memory.workspaceId));
-
-  if (!workspace) {
-    throw new NotFoundError('Workspace');
-  }
-  req.workspace = workspace;
-
-  // Check if owner
-  if (workspace.ownerId === req.userId) {
-    req.isWorkspaceOwner = true;
-    next();
-    return;
-  }
-
-  // Check membership
-  const [membership] = await db
-    .select()
-    .from(schema.workspaceMembers)
-    .where(and(
-      eq(schema.workspaceMembers.workspaceId, workspace.id),
-      eq(schema.workspaceMembers.userId, req.userId!)
-    ));
-
-  if (!membership) {
-    throw new ForbiddenError('Access denied to this memory');
-  }
-
-  req.workspaceRole = membership.role as 'admin' | 'member' | 'viewer';
   next();
 }
 
@@ -350,4 +275,8 @@ export const requireChat = [loadChat, requireChatAccess];
  * Full chat write access chain
  * Usage: router.delete('/:chatId', requireChatWrite, ...)
  */
-export const requireChatWrite = [loadChat, requireChatAccess, requireChatWriteAccess];
+export const requireChatWrite = [
+  loadChat,
+  requireChatAccess,
+  requireChatWriteAccess,
+];

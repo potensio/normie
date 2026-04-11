@@ -16,7 +16,6 @@ import {
 } from "./chat.service.js";
 import { NotFoundError, ValidationError } from "../middleware/index.js";
 import { resolveCredentials } from "../pi/credentials.js";
-import { buildSystemContext } from "./context-builder.js";
 import { generateConversationTitle } from "./title-generator.js";
 import { runPiQueryStream, type PiStreamEvent } from "../pi/stream.js";
 import * as schema from "../db/schema.js";
@@ -90,9 +89,6 @@ export async function processMessageStream(
   // Save user message
   await addUserMessage(db, chatId, message);
 
-  // Build system context
-  const systemPrompt = await buildSystemContext(workspaceId, db);
-
   // Collect full response and blocks for DB
   let fullResponse = "";
   const blocks: Array<{
@@ -110,7 +106,6 @@ export async function processMessageStream(
       workspaceId,
       chatId,
       userId,
-      systemPrompt: systemPrompt || undefined,
       currentMessage: message,
       sessionId: chat.sessionFilePath || undefined,
       credentials,

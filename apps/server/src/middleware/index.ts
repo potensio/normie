@@ -1,6 +1,6 @@
 /**
  * Middleware Exports
- * 
+ *
  * Usage:
  *   import { errorHandler, asyncHandler, NotFoundError, requireChat } from '../middleware/index.js';
  */
@@ -16,8 +16,8 @@ export {
   ServiceUnavailableError,
   errorHandler,
   asyncHandler,
-  notFoundHandler
-} from './errors.js';
+  notFoundHandler,
+} from "./errors.js";
 
 // Resource access
 export {
@@ -28,8 +28,6 @@ export {
   loadChat,
   requireChatAccess,
   requireChatWriteAccess,
-  loadMemory,
-  requireMemoryAccess,
   requireChat,
-  requireChatWrite
-} from './resource-access.js';
+  requireChatWrite,
+} from "./resource-access.js";

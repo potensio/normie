@@ -11,7 +11,6 @@ export { useLogin, useLogout, useRegister } from "./useAuth";
 // Chats
 export { useChats, useChatDelete } from "./useChats";
 export { useCurrentChat } from "./useCurrentChat";
-export { useChat } from "./useChat";
 export { useChatStream } from "./useChatStream";
 
 // UI

@@ -31,7 +31,6 @@ import {
   verifyChatAccess,
   verifyChatWriteAccess,
   updateMessageMetadata,
-  processMessage,
   type CreateChatInput,
   type UpdateChatInput,
   type SwitchModelInput,
@@ -227,39 +226,6 @@ router.post(
 
     const message = await addMessage(getDb(), chat.id, input);
     res.json(message);
-  }),
-);
-
-// ============================================
-// SEND MESSAGE (Non-streaming - for compatibility)
-// ============================================
-router.post(
-  "/:chatId/send",
-  asyncHandler(async (req: Request, res: Response) => {
-    const chatId = getStringParam(req.params.chatId);
-    const { message, provider, model, workspaceId, attachments } = req.body;
-
-    // Validate required fields
-    if (!message || !provider || !model) {
-      throw new ValidationError("message, provider, and model are required");
-    }
-
-    if (!workspaceId) {
-      throw new ValidationError("workspaceId is required");
-    }
-
-    // Process the message
-    const result = await processMessage(getDb(), {
-      chatId,
-      message,
-      provider,
-      model,
-      workspaceId,
-      userId: req.userId!,
-      attachments,
-    });
-
-    res.json(result);
   }),
 );
 

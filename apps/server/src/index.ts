@@ -22,7 +22,6 @@ import authRoutes from "./routes/auth.js";
 import workspaceRoutes from "./routes/workspaces.js";
 import chatRoutes from "./routes/chats.js";
 import apiKeyRoutes from "./routes/api-keys.js";
-import memoryRoutes from "./routes/memories.js";
 import { skillsRouter } from "./routes/skills.js";
 import * as schema from "./db/schema.js";
 import { initializePiAgent, getEnabledProviders } from "./pi/index.js";
@@ -95,7 +94,6 @@ app.use("/api/auth", authRoutes);
 app.use("/api/workspaces", workspaceRoutes);
 app.use("/api/chats", chatRoutes);
 app.use("/api/api-keys", apiKeyRoutes);
-app.use("/api/memories", memoryRoutes);
 app.use("/api", skillsRouter);
 
 // ============================================

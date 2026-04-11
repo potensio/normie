@@ -12,9 +12,7 @@ import {
   ForbiddenError,
   ValidationError,
 } from "../middleware/index.js";
-import { runPiQuery } from "../pi/index.js";
 import { resolveCredentials } from "../pi/credentials.js";
-import { buildSystemContext } from "./context-builder.js";
 import { generateConversationTitle } from "./title-generator.js";
 
 export type DbClient = NodePgDatabase<typeof schema>;
@@ -380,94 +378,3 @@ export async function getChatTree(
 }
 
 // ============================================
-// Message Processing with Pi Agent
-// ============================================
-
-export async function processMessage(
-  db: DbClient,
-  input: SendMessageInput,
-): Promise<{
-  chatId: string;
-  title?: string;
-  response: string;
-}> {
-  const { chatId, message, provider, model, workspaceId, userId } = input;
-
-  console.log("=".repeat(60));
-  console.log("[CHAT] Processing message");
-  console.log(`[CHAT] Chat: ${chatId}`);
-  console.log(`[CHAT] Provider: ${provider}`);
-  console.log(`[CHAT] Model: ${model}`);
-  console.log("=".repeat(60));
-
-  // Get or create chat
-  let chat: typeof schema.chats.$inferSelect;
-
-  try {
-    chat = await getChatById(db, chatId);
-  } catch (error) {
-    if (error instanceof NotFoundError) {
-      const initialTitle =
-        message.length > 50 ? message.substring(0, 47) + "..." : message;
-
-      chat = await createChat(
-        db,
-        workspaceId,
-        userId,
-        { title: initialTitle, provider, model },
-        chatId,
-      );
-    } else {
-      throw error;
-    }
-  }
-
-  // Resolve credentials
-  const credentials = await resolveCredentials(userId, provider);
-  if (!credentials.configured && provider !== "amazon-bedrock") {
-    throw new ValidationError(credentials.error || "No API key configured");
-  }
-
-  // Save user message
-  await addUserMessage(db, chatId, message);
-
-  // Build system context
-  const systemPrompt = await buildSystemContext(workspaceId, db);
-
-  // Run Pi Agent query
-  let assistantResponse = "";
-
-  assistantResponse = await runPiQuery({
-    provider,
-    model,
-    workspaceId,
-    chatId,
-    userId,
-    systemPrompt: systemPrompt || undefined,
-    currentMessage: message,
-    sessionId: chat.sessionFilePath || undefined,
-    credentials,
-  });
-
-  // Save assistant response
-  if (assistantResponse) {
-    await addAssistantMessage(db, chatId, assistantResponse);
-
-    // Generate title after first exchange
-    const messageCount = await getChatMessageCount(db, chatId);
-    if (messageCount === 2) {
-      const title = await generateConversationTitle({
-        userMessage: message,
-        assistantResponse,
-      });
-
-      await updateChatTitle(db, chatId, title);
-
-      console.log("[CHAT] Completed");
-      return { chatId, title, response: assistantResponse };
-    }
-  }
-
-  console.log("[CHAT] Completed");
-  return { chatId, response: assistantResponse };
-}

@@ -2,12 +2,15 @@
  * Pi Agent Streaming Module
  *
  * Wraps Pi Agent SDK to provide streaming events for SSE.
+ *
+ * This is the ACTIVE code path used by the chat streaming endpoint.
  */
 
 import {
   createAgentSession,
   AuthStorage,
   ModelRegistry,
+  DefaultResourceLoader,
   type AgentSession,
   type AgentSessionEvent,
 } from "@mariozechner/pi-coding-agent";
@@ -17,6 +20,7 @@ import { PROVIDER_ALIAS } from "./config.js";
 import { BEDROCK_MODELS } from "./bedrock-models.js";
 import { buildWorkspaceTools, type ToolBuilderOptions } from "./tools/index.js";
 import type { ResolvedCredentials } from "./credentials.js";
+
 
 /**
  * Pi Agent event for streaming
@@ -50,7 +54,6 @@ export interface RunPiStreamOptions {
   workspaceId: string;
   chatId: string;
   userId: string;
-  systemPrompt?: string;
   currentMessage: string;
   signal?: AbortSignal;
   sessionId?: string;
@@ -112,10 +115,8 @@ export async function runPiQueryStream(
     workspaceId,
     chatId,
     userId,
-    systemPrompt,
     currentMessage,
     signal,
-    sessionId,
     credentials,
   } = options;
 
@@ -198,7 +199,15 @@ export async function runPiQueryStream(
       console.warn("[PiAgent:Stream] Failed to create session manager:", error);
     }
 
-    // Create AgentSession
+    // Create resource loader with minimal defaults
+    const loader = new DefaultResourceLoader({
+      // Disable AGENTS.md and skills to prevent English context injection
+      agentsFilesOverride: () => ({ agentsFiles: [] }),
+      skillsOverride: () => ({ skills: [], diagnostics: [] }),
+    });
+    await loader.reload();
+
+    // Create Agent Session
     const result = await createAgentSession({
       authStorage,
       model: piModel,
@@ -206,6 +215,7 @@ export async function runPiQueryStream(
       tools: tools as any,
       customTools: [],
       sessionManager: piSessionManager?.getPiSessionManager(),
+      resourceLoader: loader,
     });
 
     const session: AgentSession = result.session;
@@ -283,8 +293,14 @@ export async function runPiQueryStream(
     });
 
     try {
+      // Prepend language instruction to user message for models that might ignore system prompt
+      // This ensures the language rule is in the message context, not just system prompt
+      const messageWithLanguageInstruction = `[系统指令：你必须用简体中文回复。]
+
+${currentMessage}`;
+      
       // Send prompt (this starts the streaming)
-      await session.prompt(currentMessage);
+      await session.prompt(messageWithLanguageInstruction);
 
       // Wait for completion (events are already being streamed via subscription)
       while (!done) {
