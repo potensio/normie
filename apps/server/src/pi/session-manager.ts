@@ -74,8 +74,13 @@ export class NormieSessionManager {
 		this.workspaceId = config.workspaceId;
 		this.chatId = config.chatId;
 
-		// Determine session directory
-		const sessionDir = config.sessionDir || ".pi/sessions";
+		// Determine session directory - use absolute path if provided
+		// Otherwise resolve relative to current working directory
+		let sessionDir = config.sessionDir || ".pi/sessions";
+		if (!path.isAbsolute(sessionDir)) {
+			sessionDir = path.resolve(process.cwd(), sessionDir);
+		}
+		
 		const workspaceDir = path.join(sessionDir, config.workspaceId);
 		this.sessionFilePath = path.join(workspaceDir, `${config.chatId}.jsonl`);
 

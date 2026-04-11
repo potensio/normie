@@ -16,12 +16,118 @@ import {
 } from "@mariozechner/pi-coding-agent";
 import { existsSync, mkdirSync } from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
 import { PROVIDER_ALIAS } from "./config.js";
 import { BEDROCK_MODELS } from "./bedrock-models.js";
 import { buildWorkspaceTools, type ToolBuilderOptions } from "./tools/index.js";
 import type { ResolvedCredentials } from "./credentials.js";
 import { buildUserMessage } from "./prompt.js";
 import { isComposioConfigured } from "./composio/index.js";
+
+/**
+ * Get the project root directory.
+ * This is the directory where the server is located, regardless of process.cwd().
+ */
+let _projectRoot: string | null = null;
+function getProjectRoot(): string {
+  if (!_projectRoot) {
+    // __dirname is not available in ESM, so we derive it from import.meta.url
+    // Go up from apps/server/src/pi to get project root
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    _projectRoot = path.resolve(currentDir, "../../../..");
+  }
+  return _projectRoot;
+}
+
+/**
+ * Chat lock mechanism to prevent concurrent requests to the same chat.
+ *
+ * Problem: If user sends messages quickly, multiple streaming requests
+ * can run simultaneously for the same chat, causing session corruption.
+ *
+ * Solution: Queue requests per chatId. New request waits for previous to complete.
+ */
+const chatLocks = new Map<string, Promise<void>>();
+
+/**
+ * Acquire lock for a chat. Returns a release function.
+ *
+ * If a request is already running for this chat, waits for it to complete.
+ */
+function acquireChatLock(chatId: string): () => void {
+  let releaseLock: () => void;
+
+  // Get existing lock or create new one
+  const existingLock = chatLocks.get(chatId);
+
+  // Create new promise that will be resolved when this request is done
+  const newLock = new Promise<void>((resolve) => {
+    releaseLock = () => {
+      chatLocks.delete(chatId);
+      resolve();
+    };
+  });
+
+  if (existingLock) {
+    // Chain: wait for existing, then allow this one
+    const chainedLock = existingLock.then(() => newLock);
+    chatLocks.set(chatId, chainedLock);
+  } else {
+    // No existing lock, this is the first
+    chatLocks.set(chatId, newLock);
+  }
+
+  // Return release function (will be set by Promise constructor)
+  return () => releaseLock();
+}
+
+/**
+ * Timeout configuration for streaming requests.
+ * Based on Vercel AI SDK's TimeoutConfiguration pattern.
+ */
+export interface StreamTimeoutConfig {
+  /** Total timeout from request start (hard limit) */
+  totalMs?: number;
+  /** Timeout between stream chunks - resets on each event (watchdog) */
+  chunkMs?: number;
+}
+
+/** Default timeout values */
+const DEFAULT_TOTAL_TIMEOUT_MS = 300000; // 5 minutes
+const DEFAULT_CHUNK_TIMEOUT_MS = 60000;  // 60 seconds
+
+/**
+ * Creates a watchdog timer that aborts if no activity within chunkMs.
+ * Reset the timer on each activity to prevent timeout during active streaming.
+ *
+ * @param chunkMs - Max idle time before abort (watchdog)
+ * @param onTimeout - Callback when timeout triggers
+ * @returns Object with reset() and stop() functions
+ */
+function createChunkWatchdog(
+  chunkMs: number,
+  onTimeout: () => void,
+): { reset: () => void; stop: () => void } {
+  let timer: NodeJS.Timeout | null = null;
+
+  const reset = () => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      console.warn("[Watchdog] No activity for", chunkMs, "ms, aborting...");
+      onTimeout();
+    }, chunkMs);
+  };
+
+  const stop = () => {
+    if (timer) clearTimeout(timer);
+    timer = null;
+  };
+
+  // Start timer immediately
+  reset();
+
+  return { reset, stop };
+}
 
 
 /**
@@ -68,6 +174,8 @@ export interface RunPiStreamOptions {
   signal?: AbortSignal;
   sessionId?: string;
   credentials: ResolvedCredentials;
+  /** Timeout configuration (optional) */
+  timeout?: StreamTimeoutConfig;
 }
 
 /**
@@ -130,12 +238,32 @@ export async function runPiQueryStream(
     credentials,
   } = options;
 
-  console.log("[PiAgent:Stream] Starting streaming query");
+  // Acquire lock for this chat to prevent concurrent access
+  const releaseLock = acquireChatLock(chatId);
+  console.log("[PiAgent:Stream] Starting streaming query (lock acquired for chat: " + chatId + ")");
 
-  // Change to isolated workspace directory
+  // Get project root immediately (before any chdir)
+  const projectRoot = getProjectRoot();
+
+  // Create session manager BEFORE chdir, using absolute paths
+  let piSessionManager: any = null;
+  try {
+    const { NormieSessionManager } = await import("./session-manager.js");
+    piSessionManager = new NormieSessionManager({
+      workspaceId,
+      chatId,
+      // Use absolute path derived from project root, NOT process.cwd()
+      sessionDir: path.join(projectRoot, ".pi/sessions"),
+    });
+    console.log("[PiAgent:Stream] Session file:", piSessionManager.getSessionFilePath());
+  } catch (error) {
+    console.warn("[PiAgent:Stream] Failed to create session manager:", error);
+  }
+
+  // Save original CWD and change to isolated workspace directory
   const originalCwd = process.cwd();
   const isolatedWorkDir = path.join(
-    originalCwd,
+    projectRoot,
     ".pi",
     "workspaces",
     workspaceId,
@@ -215,18 +343,6 @@ export async function runPiQueryStream(
       throw new Error(`Model '${registryProvider}/${model}' not found`);
     }
 
-    // Create session manager
-    let piSessionManager: any = null;
-    try {
-      const { NormieSessionManager } = await import("./session-manager.js");
-      piSessionManager = new NormieSessionManager({
-        workspaceId,
-        chatId,
-      });
-    } catch (error) {
-      console.warn("[PiAgent:Stream] Failed to create session manager:", error);
-    }
-
     // Create resource loader with minimal defaults
     const loader = new DefaultResourceLoader({
       // Disable AGENTS.md and skills to prevent English context injection
@@ -251,13 +367,41 @@ export async function runPiQueryStream(
 
     const session: AgentSession = result.session;
 
-    // Track completion
+    // Setup timeouts
+    const totalMs = options.timeout?.totalMs ?? DEFAULT_TOTAL_TIMEOUT_MS;
+    const chunkMs = options.timeout?.chunkMs ?? DEFAULT_CHUNK_TIMEOUT_MS;
+
+    // Track completion and errors
     let done = false;
     let errorMessage: string | null = null;
+    let aborted = false;
+
+    // Create watchdog for chunk timeout
+    const watchdog = createChunkWatchdog(chunkMs, () => {
+      aborted = true;
+      errorMessage = `Stream timed out - no activity for ${chunkMs / 1000} seconds`;
+      session.abort();
+    });
+
+    // Create total timeout
+    const totalTimeout = setTimeout(() => {
+      if (!done) {
+        console.warn("[Stream] Total timeout reached:", totalMs, "ms");
+        aborted = true;
+        errorMessage = `Stream timed out after ${totalMs / 1000} seconds`;
+        watchdog.stop();
+        session.abort();
+      }
+    }, totalMs);
 
     // Subscribe to session events and stream them immediately
     const unsubscribe = session.subscribe((event: AgentSessionEvent) => {
       console.log("[PiAgent:Stream] Event received:", event.type);
+
+      // Reset watchdog on any activity (except agent_end)
+      if (event.type !== "agent_end") {
+        watchdog.reset();
+      }
 
       // Stream text deltas
       if (event.type === "message_update") {
@@ -333,6 +477,8 @@ export async function runPiQueryStream(
       // Handle completion
       if (event.type === "agent_end") {
         console.log("[PiAgent:Stream] Agent end");
+        watchdog.stop();
+        clearTimeout(totalTimeout);
         done = true;
         if ("error" in event && event.error) {
           errorMessage = String(event.error);
@@ -346,10 +492,10 @@ export async function runPiQueryStream(
 
       // Wait for completion (events are already being streamed via subscription)
       while (!done) {
-        if (signal?.aborted) {
+        if (signal?.aborted || aborted) {
           console.log("[PiAgent:Stream] Request aborted");
           await session.abort();
-          throw new Error("Request aborted");
+          throw new Error(errorMessage || "Request aborted");
         }
         // Small delay to prevent tight loop
         await new Promise((resolve) => setTimeout(resolve, 50));
@@ -361,9 +507,13 @@ export async function runPiQueryStream(
 
       console.log("[PiAgent:Stream] Query completed");
     } finally {
+      watchdog.stop();
+      clearTimeout(totalTimeout);
       unsubscribe();
     }
   } finally {
     process.chdir(originalCwd);
+    releaseLock();
+    console.log("[PiAgent:Stream] Lock released for chat: " + chatId);
   }
 }
