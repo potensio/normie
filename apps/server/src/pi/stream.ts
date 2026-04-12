@@ -23,21 +23,13 @@ import { buildWorkspaceTools, type ToolBuilderOptions } from "./tools/index.js";
 import type { ResolvedCredentials } from "./credentials.js";
 import { buildUserMessage } from "./prompt.js";
 import { isComposioConfigured } from "./composio/index.js";
+import {
+  getSessionPath,
+  ensureSessionDir,
+  getProjectRoot,
+} from "./session-sync.js";
 
-/**
- * Get the project root directory.
- * This is the directory where the server is located, regardless of process.cwd().
- */
-let _projectRoot: string | null = null;
-function getProjectRoot(): string {
-  if (!_projectRoot) {
-    // __dirname is not available in ESM, so we derive it from import.meta.url
-    // Go up from apps/server/src/pi to get project root
-    const currentDir = path.dirname(fileURLToPath(import.meta.url));
-    _projectRoot = path.resolve(currentDir, "../../../..");
-  }
-  return _projectRoot;
-}
+// NOTE: getProjectRoot() moved to session-sync.ts for centralized path management
 
 /**
  * Chat lock mechanism to prevent concurrent requests to the same chat.
@@ -245,6 +237,13 @@ export async function runPiQueryStream(
   // Get project root immediately (before any chdir)
   const projectRoot = getProjectRoot();
 
+  // Ensure session directory exists
+  ensureSessionDir(workspaceId);
+
+  // Get deterministic session path
+  const sessionPath = getSessionPath(workspaceId, chatId);
+  console.log("[PiAgent:Stream] Session file:", sessionPath);
+
   // Create session manager BEFORE chdir, using absolute paths
   let piSessionManager: any = null;
   try {
@@ -255,7 +254,6 @@ export async function runPiQueryStream(
       // Use absolute path derived from project root, NOT process.cwd()
       sessionDir: path.join(projectRoot, ".pi/sessions"),
     });
-    console.log("[PiAgent:Stream] Session file:", piSessionManager.getSessionFilePath());
   } catch (error) {
     console.warn("[PiAgent:Stream] Failed to create session manager:", error);
   }

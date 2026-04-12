@@ -93,10 +93,124 @@ export async function checkConnectedAccount(
 }
 
 /**
+ * Find an existing auth config for a toolkit.
+ * Filters by toolkit_slug to get only relevant auth configs.
+ */
+async function findAuthConfig(
+  client: ReturnType<typeof getComposioClient>,
+  toolkitSlug: string,
+): Promise<{ id: string; isComposioManaged: boolean } | null> {
+  try {
+    // Filter by toolkit_slug for efficiency
+    const authConfigs = await client.authConfigs.list({
+      toolkit_slug: toolkitSlug,
+    });
+    
+    // Get the first (most recent) auth config for this toolkit
+    const authConfig = (authConfigs.items || [])[0];
+    
+    if (authConfig) {
+      return {
+        id: authConfig.id,
+        isComposioManaged: authConfig.is_composio_managed ?? false,
+      };
+    }
+    return null;
+  } catch (error) {
+    console.error(`[Composio] Failed to list auth configs:`, error);
+    return null;
+  }
+}
+
+/**
+ * Create a new auth config with Composio managed auth.
+ * This allows automatic OAuth setup for supported toolkits.
+ *
+ * @param client - Composio client
+ * @param toolkitSlug - The toolkit to create auth config for
+ * @returns The created auth config ID
+ */
+async function createManagedAuthConfig(
+  client: ReturnType<typeof getComposioClient>,
+  toolkitSlug: string,
+): Promise<string> {
+  console.log(`[Composio] Creating managed auth config for ${toolkitSlug}...`);
+
+  try {
+    // Use the authConfigs.create API with type: use_composio_managed_auth
+    // This follows the official Composio SDK pattern from auth-configs.d.ts
+    // The structure is: { toolkit: { slug: string }, auth_config: { type: 'use_composio_managed_auth', name?: string } }
+    const authConfig = await client.authConfigs.create({
+      toolkit: {
+        slug: toolkitSlug,
+      },
+      auth_config: {
+        type: "use_composio_managed_auth",
+        name: `${toolkitSlug} Managed Auth`,
+      },
+    });
+
+    // The response has auth_config.id
+    const authConfigId = authConfig.auth_config?.id || (authConfig as any).id;
+    
+    console.log(`[Composio] Created managed auth config: ${authConfigId}`);
+    return authConfigId;
+  } catch (error: any) {
+    // If managed auth is not supported, provide helpful error message
+    const errorMessage = error.message || "";
+    if (
+      errorMessage.includes("not supported") ||
+      errorMessage.includes("not available") ||
+      errorMessage.includes("no managed") ||
+      errorMessage.includes("does not support") ||
+      error.status === 400
+    ) {
+      throw new Error(
+        `Toolkit '${toolkitSlug}' does not support Composio managed auth. ` +
+        `Please create a custom auth config in the Composio dashboard: https://app.composio.dev`
+      );
+    }
+    throw error;
+  }
+}
+
+/**
+ * Get or create an auth config for a toolkit.
+ * First tries to find an existing auth config, then creates a new one if needed.
+ *
+ * @param client - Composio client
+ * @param toolkitSlug - The toolkit slug
+ * @param providedAuthConfigId - Optional pre-provided auth config ID
+ * @returns The auth config ID to use
+ */
+async function getOrCreateAuthConfig(
+  client: ReturnType<typeof getComposioClient>,
+  toolkitSlug: string,
+  providedAuthConfigId?: string,
+): Promise<string> {
+  // If auth config ID is already provided, use it
+  if (providedAuthConfigId) {
+    return providedAuthConfigId;
+  }
+
+  // Try to find existing auth config
+  const existingConfig = await findAuthConfig(client, toolkitSlug);
+  if (existingConfig) {
+    console.log(`[Composio] Using existing auth config ${existingConfig.id} for ${toolkitSlug}`);
+    return existingConfig.id;
+  }
+
+  // No existing config - create a new managed auth config
+  console.log(`[Composio] No existing auth config for ${toolkitSlug}, creating new one...`);
+  return createManagedAuthConfig(client, toolkitSlug);
+}
+
+/**
  * Initiate OAuth connection for a toolkit.
  * Returns a URL for the user to authenticate.
  *
- * Uses Composio's managed auth by default.
+ * Uses Composio's managed auth by default - automatically creates auth config
+ * if one doesn't exist for the toolkit.
  *
  * @param userId - Your user's ID
  * @param toolkitSlug - The toolkit to connect (e.g., 'github', 'gmail')
@@ -120,19 +234,13 @@ export async function initiateConnection(
 
   console.log(`[Composio] Initiating connection for ${toolkitSlug}`);
 
-  // If no authConfigId provided, find the auth config for this toolkit
-  let authConfigId = options?.authConfigId;
-  if (!authConfigId) {
-    const authConfigs = await client.authConfigs.list();
-    const authConfig = (authConfigs.items || []).find(
-      (ac: any) => ac.toolkit?.slug === toolkitSlug
-    );
-    if (authConfig) {
-      authConfigId = authConfig.id;
-      console.log(`[Composio] Found auth config ${authConfigId} for ${toolkitSlug}`);
-    } else {
-      throw new Error(`No auth config found for toolkit '${toolkitSlug}'. Please configure it in Composio dashboard.`);
-    }
+  // Get or create auth config for this toolkit
+  let authConfigId: string;
+  try {
+    authConfigId = await getOrCreateAuthConfig(client, toolkitSlug, options?.authConfigId);
+  } catch (error: any) {
+    console.error(`[Composio] Failed to get/create auth config for ${toolkitSlug}:`, error);
+    throw error;
   }
 
   // Create a connected account which initiates the OAuth flow
@@ -145,10 +253,10 @@ export async function initiateConnection(
   } as any);
 
   // Extract the redirect URL from the response (API returns snake_case)
-  const redirectUrl = (response as any).redirect_url || 
+  const redirectUrl = (response as any).redirect_url ||
     (response as any).redirect_uri ||
-    (response as any).redirectUrl || 
-    (response as any).authUri || 
+    (response as any).redirectUrl ||
+    (response as any).authUri ||
     (response.connectionData as any)?.redirectUrl || "";
 
   console.log(`[Composio] Connection initiated, redirect URL:`, redirectUrl);

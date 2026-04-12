@@ -37,6 +37,11 @@ import {
   type CreateBranchInput,
   type AddMessageInput,
 } from "../services/chat.service.js";
+import {
+  checkSyncStatus,
+  repairSync,
+  validateSessionIntegrity,
+} from "../pi/session-sync.js";
 
 const router = Router();
 
@@ -192,6 +197,40 @@ router.get(
 
     const tree = await getChatTree(getDb(), chatId);
     res.json({ root: tree });
+  }),
+);
+
+// ============================================
+// CHECK SESSION SYNC STATUS
+// ============================================
+router.get(
+  "/:chatId/sync-status",
+  asyncHandler(async (req: Request, res: Response) => {
+    const chatId = getStringParam(req.params.chatId);
+    const { chat } = await verifyChatAccess(getDb(), chatId, req.userId!);
+
+    const status = await checkSyncStatus(getDb(), chat.workspaceId, chatId);
+    const integrity = validateSessionIntegrity(chat.workspaceId, chatId);
+
+    res.json({
+      ...status,
+      integrity,
+    });
+  }),
+);
+
+// ============================================
+// REPAIR SESSION SYNC
+// ============================================
+router.post(
+  "/:chatId/repair-sync",
+  asyncHandler(async (req: Request, res: Response) => {
+    const chatId = getStringParam(req.params.chatId);
+    const { chat } = await verifyChatWriteAccess(getDb(), chatId, req.userId!);
+
+    const result = await repairSync(getDb(), chat.workspaceId, chatId);
+
+    res.json(result);
   }),
 );
 

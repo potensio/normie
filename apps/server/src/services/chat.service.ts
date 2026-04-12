@@ -187,17 +187,6 @@ export async function updateChatTitle(
     .where(eq(schema.chats.id, chatId));
 }
 
-export async function updateChatSession(
-  db: DbClient,
-  chatId: string,
-  sessionFilePath: string,
-): Promise<void> {
-  await db
-    .update(schema.chats)
-    .set({ sessionFilePath, updatedAt: new Date() })
-    .where(eq(schema.chats.id, chatId));
-}
-
 // ============================================
 // Messages
 // ============================================

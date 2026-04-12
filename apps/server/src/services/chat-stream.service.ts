@@ -18,6 +18,7 @@ import { NotFoundError, ValidationError } from "../middleware/index.js";
 import { resolveCredentials } from "../pi/credentials.js";
 import { generateConversationTitle } from "./title-generator.js";
 import { runPiQueryStream, type PiStreamEvent } from "../pi/stream.js";
+import { repairSync, checkSyncStatus } from "../pi/session-sync.js";
 import * as schema from "../db/schema.js";
 import { eq } from "drizzle-orm";
 
@@ -95,7 +96,16 @@ export async function processMessageStream(
     throw new ValidationError(credentials.error || "No API key configured");
   }
 
-  // Save user message
+  // Check and repair session sync before processing
+  // This ensures the AI has proper conversation context
+  const syncStatus = await checkSyncStatus(db, workspaceId, chatId);
+  if (!syncStatus.inSync) {
+    console.warn("[CHAT:Stream] Session out of sync:", syncStatus);
+    const repairResult = await repairSync(db, workspaceId, chatId);
+    console.log("[CHAT:Stream] Repair result:", repairResult);
+  }
+
+  // Save user message to database
   await addUserMessage(db, chatId, message);
 
   // Collect full response and blocks for DB
@@ -108,6 +118,7 @@ export async function processMessageStream(
   let currentTextBlock: { type: "text"; content: string } | null = null;
 
   // Run Pi Agent query with streaming
+  // Note: sessionId parameter removed - session path is now deterministic
   await runPiQueryStream(
     {
       provider,
@@ -116,7 +127,6 @@ export async function processMessageStream(
       chatId,
       userId,
       currentMessage: message,
-      sessionId: chat.sessionFilePath || undefined,
       credentials,
     },
     (piEvent: PiStreamEvent) => {
@@ -221,6 +231,11 @@ export async function processMessageStream(
 
       await updateChatTitle(db, chatId, title);
     }
+  } else {
+    // No response - something went wrong
+    console.error("[CHAT:Stream] No response received from AI");
+    // Try to repair sync in case there's partial data in session
+    await repairSync(db, workspaceId, chatId);
   }
 
   console.log("[CHAT:Stream] Completed");

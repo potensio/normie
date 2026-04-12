@@ -15,6 +15,7 @@ import {
 } from "@mariozechner/pi-coding-agent";
 import path from "path";
 import { existsSync, mkdirSync } from "fs";
+import { getSessionPath, ensureSessionDir } from "./session-sync.js";
 
 /**
  * Tree node for getTree() - defensive copy of session structure
@@ -74,20 +75,16 @@ export class NormieSessionManager {
 		this.workspaceId = config.workspaceId;
 		this.chatId = config.chatId;
 
-		// Determine session directory - use absolute path if provided
-		// Otherwise resolve relative to current working directory
-		let sessionDir = config.sessionDir || ".pi/sessions";
-		if (!path.isAbsolute(sessionDir)) {
-			sessionDir = path.resolve(process.cwd(), sessionDir);
-		}
-		
-		const workspaceDir = path.join(sessionDir, config.workspaceId);
-		this.sessionFilePath = path.join(workspaceDir, `${config.chatId}.jsonl`);
+		// Use centralized session path management
+		// This ensures consistency across the application
+		this.sessionFilePath = getSessionPath(
+			config.workspaceId,
+			config.chatId,
+			config.sessionDir
+		);
 
 		// Ensure directory exists synchronously (Pi's SessionManager expects it)
-		if (!existsSync(workspaceDir)) {
-			mkdirSync(workspaceDir, { recursive: true });
-		}
+		ensureSessionDir(config.workspaceId, config.sessionDir);
 
 		// Initialize Pi SessionManager
 		// Use .open() for existing files, .create() will also work for new files
