@@ -164,8 +164,9 @@ export interface RunPiStreamOptions {
   userId: string;
   currentMessage: string;
   signal?: AbortSignal;
-  sessionId?: string;
   credentials: ResolvedCredentials;
+  /** File attachments - paths will be injected into prompt */
+  attachments?: Array<{ path: string }>;
   /** Timeout configuration (optional) */
   timeout?: StreamTimeoutConfig;
 }
@@ -228,6 +229,7 @@ export async function runPiQueryStream(
     currentMessage,
     signal,
     credentials,
+    attachments,
   } = options;
 
   // Acquire lock for this chat to prevent concurrent access
@@ -485,8 +487,8 @@ export async function runPiQueryStream(
     });
 
     try {
-      // Send prompt with language instruction prepended
-      await session.prompt(buildUserMessage(currentMessage));
+      // Send prompt with attachments and user message
+      await session.prompt(buildUserMessage(currentMessage, attachments));
 
       // Wait for completion (events are already being streamed via subscription)
       while (!done) {

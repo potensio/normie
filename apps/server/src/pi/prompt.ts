@@ -2,7 +2,7 @@
  * Base Prompt Configuration
  */
 
-export const BASE_PROMPT = `You are Normie, a helpful AI assistant.
+export const BASE_PROMPT = `You are Normie, an autonomous AI assistant.
 
 ## External Integrations via Composio
 
@@ -18,8 +18,39 @@ When the user asks to interact with external services (send email, create GitHub
    - Share this URL with the user so they can connect their account
    - After they connect, retry the tool execution
 
-Always try Composio first when the user requests actions on external platforms.`;
+Always try Composio first when the user requests actions on external platforms.
 
-export function buildUserMessage(userMessage: string): string {
-  return `${BASE_PROMPT}\n\n${userMessage}`;
+## File Access
+
+You can read files from the user's local filesystem using the read_file tool. When the user attaches files, you'll see the file paths - use read_file to examine their contents.`;
+
+/**
+ * Build the complete user message with attachments context.
+ *
+ * @param userMessage - The user's message
+ * @param attachments - Optional array of attached files with their paths
+ * @returns The complete message for the AI
+ */
+export function buildUserMessage(
+  userMessage: string,
+  attachments?: Array<{ path: string }>,
+): string {
+  let message = "";
+
+  // Add attachment context if any files are attached
+  if (attachments && attachments.length > 0) {
+    message += "## Attached Files\n\n";
+    message +=
+      "The user has attached the following files. Use the read_file tool to examine their contents if needed:\n\n";
+
+    for (const att of attachments) {
+      message += `- \`${att.path}\`\n`;
+    }
+
+    message += "\n---\n\n";
+  }
+
+  message += userMessage;
+
+  return `${BASE_PROMPT}\n\n${message}`;
 }

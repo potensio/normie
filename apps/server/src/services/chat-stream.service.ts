@@ -59,7 +59,7 @@ export async function processMessageStream(
   input: SendMessageInput,
   onEvent: StreamEventCallback,
 ): Promise<void> {
-  const { chatId, message, provider, model, workspaceId, userId } = input;
+  const { chatId, message, provider, model, workspaceId, userId, attachments } = input;
 
   console.log("=".repeat(60));
   console.log("[CHAT:Stream] Processing message with streaming");
@@ -127,6 +127,7 @@ export async function processMessageStream(
       chatId,
       userId,
       currentMessage: message,
+      attachments,
       credentials,
     },
     (piEvent: PiStreamEvent) => {

@@ -31,7 +31,11 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   };
 
   const handleLogout = () => {
-    logout();
+    logout(undefined, {
+      onSuccess: () => {
+        onClose();
+      },
+    });
   };
 
   const tabs: { id: TabType; label: string }[] = [
