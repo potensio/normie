@@ -3,9 +3,20 @@
  *
  * Pure UI component for the chat input area.
  */
-import { useState, useRef, useCallback } from "react";
-import { Send, Paperclip, Plus, Square } from "lucide-react";
+
+import { useState, useRef, useCallback, useEffect } from "react";
+import {
+  Send,
+  Square,
+  ChevronDown,
+  Check as CheckIcon,
+  Loader2,
+} from "lucide-react";
 import type { Provider } from "@normie/types";
+import type { ModelOption } from "@/hooks/useProviders";
+import type { PendingAttachment } from "@/hooks/useAttachments";
+import { AttachmentButton } from "./AttachmentButton";
+import { AttachmentPreviewArea } from "./AttachmentPreviewArea";
 
 interface ChatInputProps {
   variant?: "home" | "chat";
@@ -14,8 +25,8 @@ interface ChatInputProps {
   selectedProvider: Provider;
   selectedModel: string;
   providers: Provider[];
-  models: { value: string; label: string }[];
-  providerLabels: Record<Provider, string>;
+  models: ModelOption[];
+  providerLabels: Record<string, string>;
   onSelectProvider: (provider: Provider) => void;
   onSelectModel: (model: string) => void;
 
@@ -25,6 +36,19 @@ interface ChatInputProps {
 
   // State
   isStreaming: boolean;
+  isLoadingProviders?: boolean;
+
+  // Attachments
+  attachments?: PendingAttachment[];
+  onAddPaths?: (
+    paths: Array<{
+      path: string;
+      name: string;
+      isDirectory: boolean;
+      size: number;
+    }>,
+  ) => void;
+  onRemoveAttachment?: (id: string) => void;
 }
 
 export function ChatInput({
@@ -39,6 +63,10 @@ export function ChatInput({
   onSend,
   onStop,
   isStreaming,
+  isLoadingProviders = false,
+  attachments = [],
+  onAddPaths,
+  onRemoveAttachment,
 }: ChatInputProps) {
   const [message, setMessage] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -87,18 +115,30 @@ export function ChatInput({
   const selectedModelLabel =
     models.find((m) => m.value === selectedModel)?.label || selectedModel;
 
+  // Find provider description (if available)
+  const selectedProviderLabel =
+    providerLabels[selectedProvider] || selectedProvider;
+
   return (
     <div
       className={
         variant === "home"
           ? "w-full max-w-[720px]"
-          : "pb-4 max-w-[720px] mx-auto w-full"
+          : "pb-4 max-w-[720px] mx-auto w-full px-4"
       }
     >
       <form
         onSubmit={handleSubmit}
         className="bg-zinc-50 border border-zinc-200 rounded-xl p-3.5 flex flex-col gap-3"
       >
+        {/* Attachment preview area */}
+        {attachments.length > 0 && onRemoveAttachment && (
+          <AttachmentPreviewArea
+            attachments={attachments}
+            onRemoveAttachment={onRemoveAttachment}
+          />
+        )}
+
         <textarea
           ref={textareaRef}
           value={message}
@@ -114,26 +154,24 @@ export function ChatInput({
 
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              className="w-8 h-8 rounded-full bg-white border border-zinc-200 flex items-center justify-center hover:bg-zinc-50 transition-colors text-zinc-500"
-            >
-              <Paperclip className="w-4 h-4" strokeWidth={1.5} />
-            </button>
-            <button
-              type="button"
-              className="w-8 h-8 rounded-full bg-white border border-zinc-200 flex items-center justify-center hover:bg-zinc-50 transition-colors text-zinc-500"
-            >
-              <Plus className="w-4 h-4" strokeWidth={1.5} />
-            </button>
+            <AttachmentButton
+              onSelectPaths={onAddPaths || (() => {})}
+              disabled={!onAddPaths}
+              isStreaming={isStreaming}
+            />
             <div className="h-5 w-px bg-zinc-200 mx-1" />
+
+            {/* Provider Selector */}
             <ProviderSelector
               providers={providers}
               selectedProvider={selectedProvider}
               providerLabels={providerLabels}
               onSelect={onSelectProvider}
               variant={variant}
+              isLoading={isLoadingProviders}
             />
+
+            {/* Model Selector */}
             <ModelSelector
               models={models}
               selectedModel={selectedModel}
@@ -168,9 +206,10 @@ export function ChatInput({
 interface ProviderSelectorProps {
   providers: Provider[];
   selectedProvider: Provider;
-  providerLabels: Record<Provider, string>;
+  providerLabels: Record<string, string>;
   onSelect: (provider: Provider) => void;
   variant: "home" | "chat";
+  isLoading?: boolean;
 }
 
 function ProviderSelector({
@@ -178,6 +217,7 @@ function ProviderSelector({
   selectedProvider,
   providerLabels,
   onSelect,
+  isLoading,
 }: ProviderSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -202,29 +242,18 @@ function ProviderSelector({
     setIsOpen(false);
   };
 
-  const getDescription = (provider: Provider) => {
-    switch (provider) {
-      case "claude":
-        return "Claude Agent SDK";
-      case "opencode":
-        return "Opencode SDK";
-      case "kimi":
-        return "Kimi API";
-      case "bedrock":
-        return "AWS Bedrock";
-      default:
-        return "";
-    }
-  };
+  const selectedLabel = providerLabels[selectedProvider] || selectedProvider;
 
   return (
     <div className="relative" ref={dropdownRef}>
       <button
         type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-1 px-3 py-2 text-sm text-gray-600 hover:bg-cream rounded-lg transition-colors"
+        onClick={() => !isLoading && setIsOpen(!isOpen)}
+        disabled={isLoading}
+        className="flex items-center gap-1 px-3 py-2 text-sm text-gray-600 hover:bg-cream rounded-lg transition-colors disabled:opacity-50"
       >
-        <span>{providerLabels[selectedProvider]}</span>
+        {isLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+        <span>{selectedLabel}</span>
         <ChevronDown
           size={16}
           className={`transition-transform ${isOpen ? "rotate-180" : ""}`}
@@ -232,28 +261,26 @@ function ProviderSelector({
       </button>
 
       {isOpen && (
-        <div className="absolute bottom-full right-0 mb-2 w-44 bg-white border border-gray-200 rounded-xl shadow-dropdown p-2 z-50">
-          {providers.map((provider) => (
-            <button
-              key={provider}
-              onClick={() => handleSelect(provider)}
-              className={`w-full flex flex-col items-start px-3 py-3 rounded-lg transition-colors text-left ${
-                selectedProvider === provider ? "bg-cream" : "hover:bg-cream"
-              }`}
-            >
-              <div className="flex items-center justify-between w-full">
-                <span className="text-sm font-medium text-gray-900">
-                  {providerLabels[provider]}
+        <div className="absolute bottom-full right-0 mb-2 w-48 bg-white border border-gray-200 rounded-xl shadow-dropdown p-2 z-50 max-h-64 overflow-y-auto">
+          {providers.map((provider) => {
+            const label = providerLabels[provider] || provider;
+            const isSelected = selectedProvider === provider;
+
+            return (
+              <button
+                key={provider}
+                onClick={() => handleSelect(provider)}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg transition-colors ${
+                  isSelected ? "bg-cream" : "hover:bg-cream"
+                }`}
+              >
+                <span className="text-start text-sm font-medium text-gray-900 truncate">
+                  {label}
                 </span>
-                {selectedProvider === provider && (
-                  <CheckIcon size={18} className="text-coral" />
-                )}
-              </div>
-              <span className="text-xs text-gray-400 mt-1">
-                {getDescription(provider)}
-              </span>
-            </button>
-          ))}
+                {isSelected && <CheckIcon size={16} className="text-coral" />}
+              </button>
+            );
+          })}
         </div>
       )}
     </div>
@@ -265,7 +292,7 @@ function ProviderSelector({
 // ============================================
 
 interface ModelSelectorProps {
-  models: { value: string; label: string }[];
+  models: ModelOption[];
   selectedModel: string;
   selectedModelLabel: string;
   onSelect: (model: string) => void;
@@ -316,27 +343,31 @@ function ModelSelector({
       </button>
 
       {isOpen && (
-        <div className="absolute bottom-full right-0 mb-2 w-44 bg-white border border-gray-200 rounded-xl shadow-dropdown p-2 z-50">
-          {models.map((model) => (
-            <button
-              key={model.value}
-              onClick={() => handleSelect(model.value)}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-lg transition-colors ${
-                selectedModel === model.value ? "bg-cream" : "hover:bg-cream"
-              }`}
-            >
-              <span className="text-sm text-gray-900">{model.label}</span>
-              {selectedModel === model.value && (
-                <CheckIcon size={16} className="text-coral" />
-              )}
-            </button>
-          ))}
+        <div className="absolute bottom-full right-0 mb-2 w-48 bg-white border border-gray-200 rounded-xl shadow-dropdown p-2 z-50 max-h-64 overflow-y-auto">
+          {models.length === 0 ? (
+            <div className="px-3 py-2 text-sm text-gray-400">
+              No models available
+            </div>
+          ) : (
+            models.map((model) => (
+              <button
+                key={model.value}
+                onClick={() => handleSelect(model.value)}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg transition-colors ${
+                  selectedModel === model.value ? "bg-cream" : "hover:bg-cream"
+                }`}
+              >
+                <span className="text-start text-sm truncate">
+                  {model.label}
+                </span>
+                {selectedModel === model.value && (
+                  <CheckIcon size={16} className="text-coral" />
+                )}
+              </button>
+            ))
+          )}
         </div>
       )}
     </div>
   );
 }
-
-// Need these imports
-import { useEffect } from "react";
-import { ChevronDown, Check as CheckIcon } from "lucide-react";

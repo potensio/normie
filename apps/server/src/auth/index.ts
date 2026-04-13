@@ -342,6 +342,6 @@ export async function requireWorkspaceAccess(
 
   req.workspace = workspace;
   req.isWorkspaceOwner = false;
-  req.workspaceRole = membership.role ?? undefined;
+  req.workspaceRole = (membership.role ?? undefined) as 'owner' | 'admin' | 'member' | 'viewer' | undefined;
   next();
 }

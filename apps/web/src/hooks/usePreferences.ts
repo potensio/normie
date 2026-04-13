@@ -2,10 +2,12 @@
  * Preferences hook - provider and model selection
  * 
  * Manages user's preferred provider/model with localStorage persistence.
+ * Validation is now handled by useProviders hook.
  */
+
 import { useState, useCallback } from 'react';
 import type { Provider } from '@normie/types';
-import { getDefaultModel, isValidModel } from '@/lib/constants';
+import { DEFAULT_PROVIDER, DEFAULT_MODEL } from '@/lib/constants';
 import {
   getPreferredProvider,
   setPreferredProvider,
@@ -23,35 +25,27 @@ interface UsePreferencesReturn {
 /**
  * Manage provider/model preferences with localStorage persistence
  * 
+ * Note: Validation that model exists for provider should be done
+ * by the component using useProviders hook alongside this.
+ * 
  * @example
  * const { provider, model, setProvider, setModel } = usePreferences();
  */
 export function usePreferences(): UsePreferencesReturn {
   const [provider, setProviderState] = useState<Provider>(getPreferredProvider);
-  const [model, setModelState] = useState<string>(() => getStoredModelSafe());
-
-  function getStoredModelSafe(): string {
-    try {
-      return getPreferredModel(getPreferredProvider());
-    } catch {
-      return getDefaultModel(getPreferredProvider());
-    }
-  }
+  const [model, setModelState] = useState<string>(getPreferredModel);
 
   const setProvider = useCallback((newProvider: Provider) => {
     setPreferredProvider(newProvider);
-    const defaultModel = getDefaultModel(newProvider);
-    setPreferredModel(defaultModel);
     setProviderState(newProvider);
-    setModelState(defaultModel);
+    // Note: Model is NOT automatically changed - let caller decide
+    // Usually they'll also call setModel with a valid model for the new provider
   }, []);
 
   const setModel = useCallback((newModel: string) => {
-    if (isValidModel(provider, newModel)) {
-      setPreferredModel(newModel);
-      setModelState(newModel);
-    }
-  }, [provider]);
+    setPreferredModel(newModel);
+    setModelState(newModel);
+  }, []);
 
   return { provider, model, setProvider, setModel };
 }

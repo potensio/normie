@@ -47,29 +47,45 @@ export async function createSession(
   return { sessionId, expiresAt };
 }
 
+// Helper: retry dengan backoff untuk ECONNRESET
+async function withRetry<T>(fn: () => Promise<T>, retries = 2): Promise<T> {
+  try {
+    return await fn();
+  } catch (error: any) {
+    if (retries > 0 && (error?.code === 'ECONNRESET' || error?.cause?.code === 'ECONNRESET')) {
+      // Wait 100ms before retry
+      await new Promise(resolve => setTimeout(resolve, 100));
+      return withRetry(fn, retries - 1);
+    }
+    throw error;
+  }
+}
+
 export async function getSession(sessionId: string): Promise<SessionData | null> {
   if (!sessionId) return null;
   
-  const db = getDb();
-  const now = new Date();
-  
-  const [session] = await db.select()
-    .from(schema.sessions)
-    .where(and(
-      eq(schema.sessions.id, sessionId),
-      gt(schema.sessions.expiresAt, now)
-    ));
-  
-  if (!session) return null;
-  
-  return {
-    id: session.id,
-    userId: session.userId,
-    userAgent: session.userAgent || undefined,
-    ipAddress: session.ipAddress || undefined,
-    expiresAt: session.expiresAt,
-    createdAt: session.createdAt || new Date()
-  };
+  return withRetry(async () => {
+    const db = getDb();
+    const now = new Date();
+    
+    const [session] = await db.select()
+      .from(schema.sessions)
+      .where(and(
+        eq(schema.sessions.id, sessionId),
+        gt(schema.sessions.expiresAt, now)
+      ));
+    
+    if (!session) return null;
+    
+    return {
+      id: session.id,
+      userId: session.userId,
+      userAgent: session.userAgent || undefined,
+      ipAddress: session.ipAddress || undefined,
+      expiresAt: session.expiresAt,
+      createdAt: session.createdAt || new Date()
+    };
+  });
 }
 
 export async function deleteSession(sessionId: string): Promise<void> {

@@ -1,20 +1,18 @@
-import React from 'react'
-import ReactDOM from 'react-dom/client'
-import { QueryClientProvider } from '@tanstack/react-query'
-import App from './App'
-import { AuthProvider } from './contexts/AuthContext'
-import { ChatProvider } from './contexts/ChatContext'
-import { queryClient } from './lib/query-client'
-import './index.css'
+import React from "react";
+import ReactDOM from "react-dom/client";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { RouterProvider } from "@tanstack/react-router";
+import { AuthProvider } from "./contexts/AuthContext";
+import { queryClient } from "./lib/query-client";
+import { router } from "./router";
+import "./index.css";
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
+ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <ChatProvider>
-          <App />
-        </ChatProvider>
+        <RouterProvider router={router} />
       </AuthProvider>
     </QueryClientProvider>
   </React.StrictMode>,
-)
+);

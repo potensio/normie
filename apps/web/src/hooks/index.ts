@@ -1,29 +1,35 @@
 /**
  * Hooks index - re-export all hooks
- * 
+ *
  * Usage:
  * import { useChats, useLogin, useWorkspaces } from '@/hooks';
  */
 
 // Auth
-export { useLogin, useLogout, useRegister } from './useAuth';
+export { useLogin, useLogout, useRegister } from "./useAuth";
 
 // Chats
-export { 
-  useChats, 
-  useCurrentChat, 
-  useChatNavigation, 
-  useChatDelete, 
-  useChatSender,
-  chatKeys 
-} from './useChats';
-export { useChatStream } from './useChatStream';
+export { useChats, useChatDelete } from "./useChats";
+export { useCurrentChat } from "./useCurrentChat";
+export { useChatStream } from "./useChatStream";
 
 // UI
-export { useSmartScroll } from './useSmartScroll';
-
-// Workspaces
-export { useWorkspaces, useCreateWorkspace, workspaceKeys } from './useWorkspaces';
+export { useSmartScroll } from "./useSmartScroll";
 
 // Preferences
-export { usePreferences } from './usePreferences';
+export { usePreferences } from "./usePreferences";
+
+// Providers
+export {
+  useProviders,
+  type ModelOption,
+  type UseProvidersReturn,
+} from "./useProviders";
+
+// API Keys
+export {
+  useApiKeys,
+  useSaveApiKey,
+  useDeleteApiKey,
+  type ApiKeyInfo,
+} from "./useApiKeys";

@@ -1,94 +1,129 @@
 /**
  * Title Generator Service
  *
- * Generates concise conversation titles using AI based on the first exchange.
+ * Generates concise conversation titles using Bedrock (OpenAI-compatible API).
+ * Uses GLM-5 for fast, cheap title generation.
  */
-import { getProvider } from '../providers/index.js';
-import type { Provider } from '@normie/types';
 
 interface TitleGenerationParams {
   userMessage: string;
   assistantResponse: string;
-  provider: Provider;
-  model?: string;
 }
 
 /**
  * Generates a conversation title based on the first user message and assistant response.
- * Falls back to a truncated user message if generation fails.
+ * Uses Bedrock (OpenAI-compatible API) for generation.
  */
 export async function generateConversationTitle(
-  params: TitleGenerationParams
+  params: TitleGenerationParams,
 ): Promise<string> {
-  const { userMessage, assistantResponse, provider, model } = params;
+  const { userMessage, assistantResponse } = params;
 
-  const providerInstance = getProvider(provider);
+  // Check Bedrock configuration
+  const apiKey = process.env.BEDROCK_API_KEY;
+  const baseUrl = process.env.BEDROCK_BASE_URL;
 
-  // Truncate inputs to keep the prompt concise
-  const truncatedUser = userMessage.substring(0, 500);
-  const truncatedAssistant = assistantResponse.substring(0, 500);
-
-  const prompt = `Generate a concise 3-6 word title for this conversation.
-
-User: ${truncatedUser}
-Assistant: ${truncatedAssistant}
-
-Rules:
-- 3-6 words only
-- No quotes or punctuation
-- Be descriptive but brief
-- Just return the title, nothing else
-
-Title:`;
+  if (!apiKey || !baseUrl) {
+    console.log("[TitleGenerator] Bedrock not configured, using fallback");
+    return fallbackTitle(userMessage);
+  }
 
   try {
-    let title = '';
+    console.log("[TitleGenerator] Generating title with Bedrock...");
 
-    // Use the provider to generate title
-    for await (const chunk of providerInstance.query({
-      prompt,
-      messages: [{ role: 'user', content: prompt }],
-      chatId: `title-gen-${Date.now()}`,
-      userId: 'system', // Title generation is lightweight
-      model: model ?? undefined,
-      maxTurns: 1,
-    })) {
-      if (chunk.type === 'text' && chunk.content) {
-        title += chunk.content;
-      }
+    // Build the title generation prompt
+    const prompt = buildTitlePrompt(userMessage, assistantResponse);
+
+    // Call Bedrock API (simple fetch, no streaming needed)
+    const response = await fetch(`${baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: "zai.glm-5",
+        messages: [
+          {
+            role: "user",
+            content: prompt,
+          },
+        ],
+        max_tokens: 50,
+        temperature: 0.3,
+        stream: false,
+      }),
+    });
+
+    if (!response.ok) {
+      console.error(`[TitleGenerator] API error: ${response.status}`);
+      return fallbackTitle(userMessage);
     }
 
-    // Clean up the title
-    title = cleanupTitle(title);
+    const data = await response.json();
+    const rawTitle = data.choices?.[0]?.message?.content || "";
 
-    return title || fallbackTitle(userMessage);
+    // Clean up the title
+    const title = cleanTitle(rawTitle);
+
+    if (title && title.length > 0 && title.length <= 100) {
+      console.log("[TitleGenerator] Generated title:", title);
+      return title;
+    }
+
+    console.log("[TitleGenerator] Invalid title, using fallback");
+    return fallbackTitle(userMessage);
   } catch (error) {
-    console.error('[TitleGenerator] Failed to generate title:', error);
+    console.error("[TitleGenerator] Error:", error);
     return fallbackTitle(userMessage);
   }
 }
 
 /**
- * Clean up a generated title:
- * - Remove surrounding quotes
- * - Remove newlines
- * - Trim whitespace
- * - Truncate if too long
+ * Build the prompt for title generation.
  */
-function cleanupTitle(title: string): string {
-  let cleaned = title
-    .trim()
-    // Remove surrounding quotes (both single and double)
-    .replace(/^[\'""'']|[\'""'']$/g, '')
-    // Replace newlines and multiple spaces with single space
-    .replace(/\s+/g, ' ')
-    // Remove common prefixes the AI might add
-    .replace(/^(Title:|Conversation:|Topic:)\s*/i, '')
-    .trim();
+function buildTitlePrompt(
+  userMessage: string,
+  assistantResponse: string,
+): string {
+  // Truncate long messages for the prompt
+  const truncatedUser =
+    userMessage.length > 300
+      ? userMessage.substring(0, 300) + "..."
+      : userMessage;
+  const truncatedAssistant =
+    assistantResponse.length > 300
+      ? assistantResponse.substring(0, 300) + "..."
+      : assistantResponse;
 
-  // Ensure it's not too long
-  if (cleaned.length > 60) {
-    cleaned = cleaned.substring(0, 57) + '...';
+  return `Generate a short 3-6 word title for this conversation. Respond with ONLY the title, no quotes, no punctuation.
+
+User: ${truncatedUser}
+
+Assistant: ${truncatedAssistant}
+
+Title:`;
+}
+
+/**
+ * Clean up the generated title.
+ */
+function cleanTitle(title: string): string {
+  // Remove quotes if present
+  let cleaned = title.replace(/^["'""]+|["'""]+$/g, "");
+
+  // Remove "Title:" prefix if present
+  cleaned = cleaned.replace(/^Title:\s*/i, "");
+
+  // Remove trailing punctuation
+  cleaned = cleaned.replace(/[.!?,;:]+$/, "");
+
+  // Remove newlines and extra spaces
+  cleaned = cleaned.replace(/\n/g, " ").replace(/\s+/g, " ").trim();
+
+  // Capitalize first letter
+  if (cleaned.length > 0) {
+    cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
   }
 
   return cleaned;
@@ -103,5 +138,5 @@ function fallbackTitle(userMessage: string): string {
   if (trimmed.length <= 30) {
     return trimmed;
   }
-  return trimmed.substring(0, 27) + '...';
+  return trimmed.substring(0, 27) + "...";
 }

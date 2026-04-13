@@ -1,15 +1,10 @@
 /**
- * AnimatedStream - Flowtoken-style smooth streaming animation
- * 
- * DEPRECATED: This component is too complex and causes jank.
- * Use MarkdownRenderer for completed messages and a simpler
- * streaming approach for live text.
- * 
- * For now, this is a thin wrapper that falls back to MarkdownRenderer
- * for completed messages and shows a simple animated text for streaming.
+ * AnimatedStream - Clean streaming text display
+ *
+ * Renders markdown content with a blinking cursor during streaming.
+ * Uses a simple text cursor (█) that blinks via CSS animation.
  */
-import { memo, useRef, useEffect, useState, useCallback } from 'react';
-import { MarkdownRenderer } from './MarkdownRenderer';
+import { MarkdownRenderer } from "./MarkdownRenderer";
 
 interface AnimatedStreamProps {
   content: string;
@@ -17,8 +12,12 @@ interface AnimatedStreamProps {
   className?: string;
 }
 
-function _AnimatedStream({ content, isStreaming, className = '' }: AnimatedStreamProps) {
-  // For completed messages, use the full MarkdownRenderer
+export function AnimatedStream({
+  content,
+  isStreaming,
+  className = "",
+}: AnimatedStreamProps) {
+  // For completed messages, render without cursor
   if (!isStreaming) {
     return (
       <div className={className}>
@@ -27,49 +26,15 @@ function _AnimatedStream({ content, isStreaming, className = '' }: AnimatedStrea
     );
   }
 
-  // For streaming, use simple fade-in animation on new content
+  // For streaming, append a blinking cursor character
+  // This ensures it appears inline with the text
+  const contentWithCursor = content + " █";
+
   return (
     <div className={className}>
-      <StreamingMarkdown content={content} />
-      <span className="streaming-cursor-coral" />
+      <div className="streaming-text">
+        <MarkdownRenderer content={contentWithCursor} />
+      </div>
     </div>
   );
 }
-
-/**
- * StreamingMarkdown - Simplified streaming with RAF-throttled updates
- */
-function StreamingMarkdown({ content }: { content: string }) {
-  const [displayContent, setDisplayContent] = useState(content);
-  const rafRef = useRef<number | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    // Throttle updates to 60fps using RAF
-    if (rafRef.current) {
-      cancelAnimationFrame(rafRef.current);
-    }
-
-    rafRef.current = requestAnimationFrame(() => {
-      setDisplayContent(content);
-      rafRef.current = null;
-    });
-
-    return () => {
-      if (rafRef.current) {
-        cancelAnimationFrame(rafRef.current);
-      }
-    };
-  }, [content]);
-
-  return (
-    <div 
-      ref={containerRef}
-      className="streaming-markdown animate-fade-in-subtle"
-    >
-      <MarkdownRenderer content={displayContent} />
-    </div>
-  );
-}
-
-export const AnimatedStream = memo(_AnimatedStream);

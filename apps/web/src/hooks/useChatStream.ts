@@ -1,361 +1,251 @@
-/**
- * useChatStream - Simple streaming without over-engineering
- *
- * REALITY CHECK:
- * ChatGPT, Claude.ai, etc. achieve smooth streaming because:
- * 1. Their backends send small, frequent chunks (1-10 chars at a time)
- * 2. They use simple React rendering - no fancy tricks
- * 3. The "smoothness" is from consistent chunk timing, not frontend magic
- *
- * If your backend sends big chunks infrequently, NO frontend trick will help.
- */
-import { useState, useRef, useCallback } from 'react';
-import type { Message, ToolCall, Todo, InlineToolCall, Provider } from '@normie/types';
-import { generateId } from '@normie/utils';
-import { chatApi } from '@/lib/api';
-import { queryClient } from '@/lib/query-client';
+import { useState, useCallback, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { chatKeys } from "./useCurrentChat";
+import type { Message } from "@normie/types";
+import { generateId } from "@normie/utils";
 
-// Helper to check if error is a user-initiated abort
-function isAbortError(error: unknown): boolean {
-  if (error instanceof Error) {
-    return error.name === 'AbortError' ||
-           error.message?.includes('abort') ||
-           error.message?.includes('cancelled') ||
-           error.message?.includes('The operation was aborted');
-  }
-  return false;
+interface StreamOptions {
+  chatId: string;
+  message: string;
+  provider: string;
+  model: string;
+  workspaceId: string;
+  userId: string;
+  attachments?: Array<{
+    id: string;
+    filename: string;
+    originalName: string;
+    mimeType: string;
+    size: number;
+    storagePath: string;
+  }>;
 }
 
-interface UseChatStreamReturn {
-  messages: Message[];
+interface StreamState {
   isStreaming: boolean;
-  toolCalls: ToolCall[];
-  todos: Todo[];
-  generatedTitle: string | null;
-  sendMessage: (params: {
-    content: string;
-    chatId: string;
-    chatTitle: string;
-    provider: Provider;
-    model: string;
-    workspaceId: string | null;
-    userId: string;
-  }, callbacks?: {
-    onTitleUpdate?: (title: string) => void;
-  }) => Promise<{ chatId: string; chatTitle: string } | null>;
-  stopStreaming: (chatId: string, provider: Provider) => Promise<void>;
-  setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
-  setToolCalls: React.Dispatch<React.SetStateAction<ToolCall[]>>;
-  setTodos: React.Dispatch<React.SetStateAction<Todo[]>>;
-  loadMessages: (chat: { messages: Message[]; todos?: Todo[]; toolCalls?: ToolCall[] }) => void;
-  reset: () => void;
+  error: string | null;
 }
 
-export function useChatStream(): UseChatStreamReturn {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [toolCalls, setToolCalls] = useState<ToolCall[]>([]);
-  const [todos, setTodos] = useState<Todo[]>([]);
-  const [generatedTitle, setGeneratedTitle] = useState<string | null>(null);
+export function useChatStream() {
+  const queryClient = useQueryClient();
+  const [state, setState] = useState<StreamState>({
+    isStreaming: false,
+    error: null,
+  });
 
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const assistantMessageIdRef = useRef<string | null>(null);
+  const currentTextBlockIndexRef = useRef<number>(0); // Track which text block we're writing to
 
-  const reset = useCallback(() => {
-    setMessages([]);
-    setToolCalls([]);
-    setTodos([]);
-    setGeneratedTitle(null);
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-  }, []);
-
-  const loadMessages = useCallback((chat: { messages: Message[]; todos?: Todo[]; toolCalls?: ToolCall[] }) => {
-    setMessages(chat.messages);
-    setTodos(chat.todos || []);
-    setToolCalls(chat.toolCalls || []);
-  }, []);
-
-  const stopStreaming = useCallback(async (chatId: string, provider: Provider) => {
-    window.electronAPI?.abortCurrentRequest();
-    if (chatId) {
-      await chatApi.abort(chatId, provider);
-    }
-    setIsStreaming(false);
-  }, []);
-
-  const sendMessage = useCallback(
-    async (
-      params: {
-        content: string;
-        chatId: string;
-        chatTitle: string;
-        provider: Provider;
-        model: string;
-        workspaceId: string | null;
-        userId: string;
-      },
-      callbacks?: {
-        onTitleUpdate?: (title: string) => void;
-      }
-    ): Promise<{ chatId: string; chatTitle: string } | null> => {
-      const { content, chatId, chatTitle, provider, model, workspaceId, userId } = params;
-
-      if (!content.trim() || isStreaming) return null;
+  const startStream = useCallback(
+    async (options: StreamOptions) => {
+      const {
+        chatId,
+        message,
+        provider,
+        model,
+        workspaceId,
+        userId,
+        attachments,
+      } = options;
+      setState({ isStreaming: true, error: null });
+      const userMessageId = generateId();
+      const assistantMessageId = generateId();
+      assistantMessageIdRef.current = assistantMessageId;
+      currentTextBlockIndexRef.current = 0; // Reset for new message
 
       const userMessage: Message = {
-        id: generateId(),
-        role: 'user',
-        content: content.trim(),
+        id: userMessageId,
+        role: "user",
+        blocks: [{ type: "text", content: message.trim() }],
+        attachments,
       };
-
-      // Add user message
-      setMessages((prev) => [...prev, userMessage]);
-
-      // Create placeholder assistant message
-      const assistantMessageId = generateId();
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: assistantMessageId,
-          role: 'assistant',
-          content: '',
-          reasoning: '',
-          inlineToolCalls: [],
-        },
-      ]);
-
-      setIsStreaming(true);
-
+      const assistantMessage: Message = {
+        id: assistantMessageId,
+        role: "assistant",
+        blocks: [{ type: "text", content: "" }],
+      };
+      queryClient.setQueryData(chatKeys.detail(chatId), (old: any) => {
+        if (!old)
+          return {
+            id: chatId,
+            title: "New Chat",
+            provider,
+            model,
+            workspaceId,
+            userId,
+            messages: [userMessage, assistantMessage],
+            todos: [],
+            toolCalls: [],
+            updatedAt: Date.now(),
+          };
+        return {
+          ...old,
+          messages: [...(old.messages || []), userMessage, assistantMessage],
+        };
+      });
       try {
-        const reader = await chatApi.send({
-          content,
-          chatId,
-          provider,
-          model,
-          workspaceId,
-          userId,
-        });
-
-        let fullContent = '';
-        let fullReasoning = '';
-        const pendingToolCalls = new Map<string, string>();
-
+        const response = await fetch(
+          `http://localhost:3001/api/chats/${chatId}/stream`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({
+              message,
+              provider,
+              model,
+              workspaceId,
+              attachments: attachments?.map((a) => ({ path: a.storagePath })),
+            }),
+          },
+        );
+        if (!response.ok)
+          throw new Error(
+            (await response.json().catch(() => ({ error: "Stream failed" })))
+              .error || "Stream failed",
+          );
+        const reader = response.body!.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
-          if (!value) continue;
-
-          // Parse SSE data
-          const lines = value.split('\n');
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
           for (const line of lines) {
-            if (line.startsWith(':')) continue;
-            if (!line.startsWith('data: ')) continue;
+            if (line.startsWith("data: ")) {
+              try {
+                const data = JSON.parse(line.substring(6));
 
-            try {
-              const data = JSON.parse(line.slice(6));
+                // Handle text deltas
+                if (data.type === "text") {
+                  queryClient.setQueryData(
+                    chatKeys.detail(chatId),
+                    (old: any) => {
+                      if (!old) return old;
+                      const messages = [...(old.messages || [])];
+                      const lastIndex = messages.length - 1;
+                      if (
+                        lastIndex >= 0 &&
+                        messages[lastIndex].id === assistantMessageId
+                      ) {
+                        const blocks = [...(messages[lastIndex].blocks || [])];
 
-              switch (data.type) {
-                case 'text':
-                  if (data.content) {
-                    if (data.isReasoning) {
-                      fullReasoning += data.content;
-                    } else {
-                      fullContent += data.content;
-                    }
-                    // Simple React update - this is how most apps do it
-                    setMessages((prev) =>
-                      prev.map((m) =>
-                        m.id === assistantMessageId
-                          ? { ...m, content: fullContent, reasoning: fullReasoning }
-                          : m
-                      )
-                    );
-                  }
-                  break;
+                        // Get the current text block we're writing to
+                        const currentIndex = currentTextBlockIndexRef.current;
 
-                case 'tool_use':
-                  if (data.name) {
-                    const localToolId = generateId();
+                        if (blocks[currentIndex]?.type === "text") {
+                          // Append to existing text block
+                          blocks[currentIndex] = {
+                            type: "text",
+                            content:
+                              (blocks[currentIndex].content || "") +
+                              data.content,
+                          };
+                        } else {
+                          // Create new text block at current position
+                          const newBlock = {
+                            type: "text" as const,
+                            content: data.content,
+                          };
+                          blocks.splice(currentIndex, 0, newBlock);
+                        }
 
-                    const toolCall: ToolCall = {
-                      id: localToolId,
-                      name: data.name,
-                      input: data.input || {},
-                      status: 'running',
-                    };
-                    setToolCalls((prev) => [...prev, toolCall]);
+                        messages[lastIndex] = {
+                          ...messages[lastIndex],
+                          blocks,
+                        };
+                      }
+                      return { ...old, messages };
+                    },
+                  );
+                }
 
-                    if (data.id) {
-                      pendingToolCalls.set(data.id, localToolId);
-                    }
+                // Handle tool call events
+                if (data.type === "tool") {
+                  queryClient.setQueryData(
+                    chatKeys.detail(chatId),
+                    (old: any) => {
+                      if (!old) return old;
+                      const messages = [...(old.messages || [])];
+                      const lastIndex = messages.length - 1;
 
-                    const inlineToolCall: InlineToolCall = {
-                      id: localToolId,
-                      name: data.name,
-                      input: data.input || {},
-                      status: 'running',
-                    };
-                    setMessages((prev) =>
-                      prev.map((m) =>
-                        m.id === assistantMessageId
-                          ? {
-                              ...m,
-                              inlineToolCalls: [
-                                ...(m.inlineToolCalls || []),
-                                inlineToolCall,
-                              ],
-                            }
-                          : m
-                      )
-                    );
+                      if (
+                        lastIndex >= 0 &&
+                        messages[lastIndex].id === assistantMessageId
+                      ) {
+                        const blocks = [...(messages[lastIndex].blocks || [])];
 
-                    if (data.name === 'TodoWrite' && data.input?.todos) {
-                      setTodos(data.input.todos as Todo[]);
-                    }
-                  }
-                  break;
+                        // Find existing tool block by ID
+                        const toolBlockIndex = blocks.findIndex(
+                          (b) =>
+                            b.type === "tool" &&
+                            b.toolCall.id === data.toolCallId,
+                        );
 
-                case 'tool_result':
-                  if (data.tool_use_id || data.result !== undefined) {
-                    const apiToolId = data.tool_use_id;
-                    const localId = apiToolId
-                      ? pendingToolCalls.get(apiToolId)
-                      : null;
+                        // Create or update tool block
+                        const toolBlock = {
+                          type: "tool" as const,
+                          toolCall: {
+                            id: data.toolCallId!,
+                            name: data.toolName!,
+                            input: data.toolInput || {},
+                            status: data.toolStatus!,
+                            result: data.toolResult,
+                            startTime: Date.now(),
+                            errorMessage: data.toolError,
+                          },
+                        };
 
-                    if (localId) {
-                      setToolCalls((prev) =>
-                        prev.map((t) =>
-                          t.id === localId
-                            ? { ...t, status: 'success', result: data.result }
-                            : t
-                        )
-                      );
+                        if (toolBlockIndex >= 0) {
+                          // Update existing tool block
+                          blocks[toolBlockIndex] = toolBlock;
+                        } else {
+                          // Add new tool block at the end
+                          blocks.push(toolBlock);
+                          // Tool interrupts text - next text goes in a new block
+                          currentTextBlockIndexRef.current = blocks.length;
+                        }
 
-                      setMessages((prev) =>
-                        prev.map((m) =>
-                          m.id === assistantMessageId
-                            ? {
-                                ...m,
-                                inlineToolCalls:
-                                  m.inlineToolCalls?.map((t) =>
-                                    t.id === localId
-                                      ? {
-                                          ...t,
-                                          status: 'success',
-                                          result: data.result,
-                                        }
-                                      : t
-                                  ) || [],
-                              }
-                            : m
-                        )
-                      );
+                        messages[lastIndex] = {
+                          ...messages[lastIndex],
+                          blocks,
+                        };
+                      }
 
-                      pendingToolCalls.delete(apiToolId);
-                    }
-                  }
-                  break;
+                      return { ...old, messages };
+                    },
+                  );
+                }
 
-                case 'title_update':
-                  // Title was auto-generated by AI after first exchange
-                  if (data.title) {
-                    setGeneratedTitle(data.title);
-                    // Update the chat title in query cache
-                    queryClient.setQueryData(['chats', 'list'], (old: unknown) => {
-                      if (!old || typeof old !== 'object' || !('chats' in old)) return old;
-                      const oldData = old as { chats: Array<{ id: string; title: string }> };
-                      return {
-                        ...oldData,
-                        chats: oldData.chats.map((chat) =>
-                          chat.id === chatId ? { ...chat, title: data.title } : chat
-                        ),
-                      };
-                    });
-                    // Call the callback if provided
-                    callbacks?.onTitleUpdate?.(data.title);
-                  }
-                  break;
-
-                case 'error':
-                  throw new Error(data.message || 'Stream error');
+                if (data.type === "done") {
+                  setState((prev) => ({ ...prev, isStreaming: false }));
+                  // Don't invalidate - we already have the complete blocks in cache
+                  // Invalidating would refetch from DB and we'd lose the blocks
+                  // The blocks are now persisted in DB metadata, so next visit will load them
+                  queryClient.invalidateQueries({
+                    queryKey: ["chats", "list"],
+                  });
+                }
+                if (data.type === "error")
+                  throw new Error(data.message || "Stream error");
+              } catch (parseError) {
+                console.error("[Stream] Parse error:", parseError);
               }
-            } catch {
-              // Skip parse errors
             }
           }
         }
-
-        // Final update
-        setMessages((prev) =>
-          prev.map((m) => {
-            if (m.id !== assistantMessageId) return m;
-            return {
-              ...m,
-              content: fullContent,
-              reasoning: fullReasoning || undefined,
-              inlineToolCalls: m.inlineToolCalls?.length
-                ? m.inlineToolCalls
-                : undefined,
-            };
-          })
-        );
-
-        return { chatId, chatTitle };
       } catch (error) {
-        console.error('[useChatStream] Error:', error);
-
-        // Don't show error for user-initiated abort
-        if (isAbortError(error)) {
-          console.log('[useChatStream] Stream aborted by user, not an error');
-          // Clean up: remove empty placeholder or keep accumulated content
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === assistantMessageId
-                ? {
-                    ...m,
-                    // Keep accumulated content, clean up reasoning if empty
-                    reasoning: m.reasoning || undefined,
-                  }
-                : m
-            )
-          );
-        } else {
-          // Only show error for actual errors (not aborts)
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === assistantMessageId
-                ? {
-                    ...m,
-                    content:
-                      m.content +
-                      `\n\n[Error: ${error instanceof Error ? error.message : 'Unknown error'}]`,
-                  }
-                : m
-            )
-          );
-        }
-
-        return null;
-      } finally {
-        setIsStreaming(false);
+        console.error("[Stream] Error:", error);
+        setState({ isStreaming: false, error: (error as Error).message });
+        queryClient.invalidateQueries({ queryKey: chatKeys.detail(chatId) });
       }
     },
-    [isStreaming]
+    [queryClient],
   );
-
-  return {
-    messages,
-    isStreaming,
-    toolCalls,
-    todos,
-    generatedTitle,
-    sendMessage,
-    stopStreaming,
-    setMessages,
-    setToolCalls,
-    setTodos,
-    loadMessages,
-    reset,
-  };
+  const stopStream = useCallback(() => {
+    setState((prev) => ({ ...prev, isStreaming: false }));
+  }, []);
+  return { ...state, startStream, stopStream };
 }

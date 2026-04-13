@@ -1,6 +1,6 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer } from "electron";
 
-const SERVER_URL = 'http://localhost:3001';
+const SERVER_URL = "http://localhost:3001";
 
 // ============================================
 // TYPES
@@ -56,14 +56,17 @@ let userWorkspaces: Workspace[] = [];
 // FETCH WITH AUTH HELPER (auto-refresh token)
 // ============================================
 
-async function fetchWithAuth(url: string, options: FetchOptions = {}): Promise<Response> {
+async function fetchWithAuth(
+  url: string,
+  options: FetchOptions = {},
+): Promise<Response> {
   // Ensure credentials are included for httpOnly cookies
   const fetchOptions: RequestInit = {
     ...options,
-    credentials: 'include',
+    credentials: "include",
     headers: {
       ...options.headers,
-    }
+    },
   };
 
   let response = await fetch(url, fetchOptions);
@@ -71,45 +74,50 @@ async function fetchWithAuth(url: string, options: FetchOptions = {}): Promise<R
   // If unauthorized, try to refresh the token
   if (response.status === 401) {
     const errorData = await response.json().catch(() => ({}));
-    
+
     // Try to refresh if we have a session
-    if (errorData.code === 'TOKEN_EXPIRED' || errorData.code === 'TOKEN_REQUIRED') {
+    if (
+      errorData.code === "TOKEN_EXPIRED" ||
+      errorData.code === "TOKEN_REQUIRED"
+    ) {
       try {
         const refreshResponse = await fetch(`${SERVER_URL}/api/auth/refresh`, {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' }
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
         });
 
         if (refreshResponse.ok) {
           const refreshData = await refreshResponse.json();
-          
+
           // Update user if returned
           if (refreshData.user) {
             currentUser = {
               id: refreshData.user.id,
               email: refreshData.user.email,
-              displayName: refreshData.user.displayName
+              displayName: refreshData.user.displayName,
             };
           }
-          
+
           // Retry the original request
           response = await fetch(url, fetchOptions);
           return response;
         }
-        
+
         // Refresh failed - session expired
         currentUser = null;
         currentWorkspace = null;
         userWorkspaces = [];
-        
       } catch (refreshError) {
-        console.error('[AUTH] Refresh failed:', refreshError);
+        console.error("[AUTH] Refresh failed:", refreshError);
       }
     }
-    
+
     // Clear auth state on session expired
-    if (errorData.code === 'SESSION_EXPIRED' || errorData.code === 'NO_SESSION') {
+    if (
+      errorData.code === "SESSION_EXPIRED" ||
+      errorData.code === "NO_SESSION"
+    ) {
       currentUser = null;
       currentWorkspace = null;
       userWorkspaces = [];
@@ -123,72 +131,78 @@ async function fetchWithAuth(url: string, options: FetchOptions = {}): Promise<R
 // AUTH API
 // ============================================
 
-contextBridge.exposeInMainWorld('authAPI', {
+contextBridge.exposeInMainWorld("authAPI", {
   // Initialize auth - check if we have a valid session
   initAuth: async (): Promise<boolean> => {
     try {
       // Try refresh first (will return user info if session valid)
       const response = await fetch(`${SERVER_URL}/api/auth/refresh`, {
-        method: 'POST',
-        credentials: 'include'
+        method: "POST",
+        credentials: "include",
       });
-      
+
       if (response.ok) {
         const data = await response.json();
-        
+
         if (data.user) {
           currentUser = {
             id: data.user.id,
             email: data.user.email,
-            displayName: data.user.displayName
+            displayName: data.user.displayName,
           };
         }
-        
+
         // Get workspaces
         const meResponse = await fetch(`${SERVER_URL}/api/auth/me`, {
-          credentials: 'include'
+          credentials: "include",
         });
-        
+
         if (meResponse.ok) {
           const meData = await meResponse.json();
           userWorkspaces = meData.workspaces || [];
-          currentWorkspace = userWorkspaces.find(w => w.isDefault) || userWorkspaces[0] || null;
+          currentWorkspace =
+            userWorkspaces.find((w) => w.isDefault) ||
+            userWorkspaces[0] ||
+            null;
         }
-        
+
         return true;
       }
-      
+
       // Check auth status without refresh
       const statusResponse = await fetch(`${SERVER_URL}/api/auth/status`, {
-        credentials: 'include'
+        credentials: "include",
       });
-      
+
       if (statusResponse.ok) {
         const statusData = await statusResponse.json();
-        
+
         if (statusData.authenticated) {
           // Try to get user info
           const meResponse = await fetch(`${SERVER_URL}/api/auth/me`, {
-            credentials: 'include'
+            credentials: "include",
           });
-          
+
           if (meResponse.ok) {
             const meData = await meResponse.json();
             currentUser = {
               id: meData.id,
               email: meData.email,
-              displayName: meData.displayName
+              displayName: meData.displayName,
             };
             userWorkspaces = meData.workspaces || [];
-            currentWorkspace = userWorkspaces.find(w => w.isDefault) || userWorkspaces[0] || null;
+            currentWorkspace =
+              userWorkspaces.find((w) => w.isDefault) ||
+              userWorkspaces[0] ||
+              null;
             return true;
           }
         }
       }
-      
+
       return false;
     } catch (error) {
-      console.error('[AUTH] Init error:', error);
+      console.error("[AUTH] Init error:", error);
       currentUser = null;
       currentWorkspace = null;
       userWorkspaces = [];
@@ -199,58 +213,68 @@ contextBridge.exposeInMainWorld('authAPI', {
   // Login
   login: async (email: string, password: string): Promise<void> => {
     const response = await fetch(`${SERVER_URL}/api/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ email, password })
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ email, password }),
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Login failed' }));
-      throw new Error(error.error || 'Login failed');
+      const error = await response
+        .json()
+        .catch(() => ({ error: "Login failed" }));
+      throw new Error(error.error || "Login failed");
     }
 
     const data = await response.json();
     currentUser = data.user;
-    
+
     // Get workspaces
     const meResponse = await fetch(`${SERVER_URL}/api/auth/me`, {
-      credentials: 'include'
+      credentials: "include",
     });
-    
+
     if (meResponse.ok) {
       const meData = await meResponse.json();
       userWorkspaces = meData.workspaces || [];
-      currentWorkspace = userWorkspaces.find(w => w.isDefault) || userWorkspaces[0] || null;
+      currentWorkspace =
+        userWorkspaces.find((w) => w.isDefault) || userWorkspaces[0] || null;
     }
   },
 
   // Register
-  register: async (email: string, password: string, displayName: string): Promise<void> => {
+  register: async (
+    email: string,
+    password: string,
+    displayName: string,
+  ): Promise<void> => {
     const response = await fetch(`${SERVER_URL}/api/auth/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ email, password, displayName })
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ email, password, displayName }),
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Registration failed' }));
-      throw new Error(error.error || 'Registration failed');
+      const error = await response
+        .json()
+        .catch(() => ({ error: "Registration failed" }));
+      throw new Error(error.error || "Registration failed");
     }
 
     const data = await response.json();
     currentUser = data.user;
-    
+
     // Get workspaces
     const meResponse = await fetch(`${SERVER_URL}/api/auth/me`, {
-      credentials: 'include'
+      credentials: "include",
     });
-    
+
     if (meResponse.ok) {
       const meData = await meResponse.json();
       userWorkspaces = meData.workspaces || [];
-      currentWorkspace = userWorkspaces.find(w => w.isDefault) || userWorkspaces[0] || null;
+      currentWorkspace =
+        userWorkspaces.find((w) => w.isDefault) || userWorkspaces[0] || null;
     }
   },
 
@@ -258,8 +282,8 @@ contextBridge.exposeInMainWorld('authAPI', {
   logout: async (): Promise<void> => {
     try {
       await fetch(`${SERVER_URL}/api/auth/logout`, {
-        method: 'POST',
-        credentials: 'include'
+        method: "POST",
+        credentials: "include",
       });
     } catch (e) {
       // Ignore errors
@@ -282,16 +306,21 @@ contextBridge.exposeInMainWorld('authAPI', {
   isLoggedIn: (): boolean => !!currentUser,
 
   // Create workspace
-  createWorkspace: async (name: string, description: string): Promise<Workspace> => {
+  createWorkspace: async (
+    name: string,
+    description: string,
+  ): Promise<Workspace> => {
     const response = await fetchWithAuth(`${SERVER_URL}/api/workspaces`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, description })
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, description }),
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Failed to create workspace' }));
-      throw new Error(error.error || 'Failed to create workspace');
+      const error = await response
+        .json()
+        .catch(() => ({ error: "Failed to create workspace" }));
+      throw new Error(error.error || "Failed to create workspace");
     }
 
     const workspace = await response.json();
@@ -301,7 +330,7 @@ contextBridge.exposeInMainWorld('authAPI', {
 
   // Switch workspace
   switchWorkspace: (workspaceId: string): void => {
-    const workspace = userWorkspaces.find(w => w.id === workspaceId);
+    const workspace = userWorkspaces.find((w) => w.id === workspaceId);
     if (workspace) {
       currentWorkspace = workspace;
     }
@@ -309,11 +338,13 @@ contextBridge.exposeInMainWorld('authAPI', {
 
   // Get chats for workspace
   getChats: async (workspaceId: string): Promise<Chat[]> => {
-    const response = await fetchWithAuth(`${SERVER_URL}/api/chats/workspace/${workspaceId}`);
+    const response = await fetchWithAuth(
+      `${SERVER_URL}/api/chats/workspace/${workspaceId}`,
+    );
 
     if (!response.ok) {
       const error = await response.text();
-      throw new Error('Failed to load chats: ' + error);
+      throw new Error("Failed to load chats: " + error);
     }
 
     const data = await response.json();
@@ -333,58 +364,77 @@ contextBridge.exposeInMainWorld('authAPI', {
 
   // Delete chat
   deleteChat: async (chatId: string): Promise<void> => {
+    // First delete attachments from disk
+    await ipcRenderer.invoke("delete-chat-attachments", chatId);
+
+    // Then delete the chat from the server
     const response = await fetchWithAuth(`${SERVER_URL}/api/chats/${chatId}`, {
-      method: 'DELETE'
+      method: "DELETE",
     });
 
     if (!response.ok) {
-      throw new Error('Failed to delete chat');
+      throw new Error("Failed to delete chat");
     }
-  }
+  },
 });
 
 // ============================================
 // ELECTRON API (Chat functionality)
 // ============================================
 
-contextBridge.exposeInMainWorld('electronAPI', {
+contextBridge.exposeInMainWorld("electronAPI", {
   // Abort the current ongoing request (client-side)
   abortCurrentRequest: () => {
     if (currentAbortController) {
-      console.log('[PRELOAD] Aborting current request');
+      console.log("[PRELOAD] Aborting current request");
       currentAbortController.abort();
       currentAbortController = null;
     }
   },
 
   // Stop the backend query execution
-  stopQuery: async (chatId: string, provider: string = 'claude'): Promise<{ success: boolean; error?: string }> => {
-    console.log('[PRELOAD] Stopping query for chatId:', chatId, 'provider:', provider);
+  stopQuery: async (
+    chatId: string,
+    provider: string = "claude",
+  ): Promise<{ success: boolean; error?: string }> => {
+    console.log(
+      "[PRELOAD] Stopping query for chatId:",
+      chatId,
+      "provider:",
+      provider,
+    );
     try {
       const response = await fetchWithAuth(`${SERVER_URL}/api/abort`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json'
+          "Content-Type": "application/json",
         },
-        body: JSON.stringify({ chatId, provider })
+        body: JSON.stringify({ chatId, provider }),
       });
       const result = await response.json();
-      console.log('[PRELOAD] Stop query result:', result);
+      console.log("[PRELOAD] Stop query result:", result);
       return result;
     } catch (error) {
-      console.error('[PRELOAD] Error stopping query:', error);
+      console.error("[PRELOAD] Error stopping query:", error);
       return { success: false, error: (error as Error).message };
     }
   },
 
-  // Send a chat message to the backend
+  // Send a chat message to the backend via Pi Agent streaming endpoint
   sendMessage: async (
     message: string,
     chatId: string,
-    provider: string = 'claude',
+    provider: string = "claude",
     model: string | null = null,
     workspaceId: string | null = null,
-    userId: string | null = null
+    userId: string | null = null,
+    attachments?: Array<{
+      filename: string;
+      originalName: string;
+      mimeType: string;
+      size: number;
+      storagePath: string;
+    }>,
   ): Promise<StreamResponse> => {
     // Abort any previous request
     if (currentAbortController) {
@@ -396,27 +446,52 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const signal = currentAbortController.signal;
 
     return new Promise((resolve, reject) => {
-      console.log('[PRELOAD] Sending message to backend:', message);
+      console.log("[PRELOAD] Sending message to Pi Agent:", {
+        chatId,
+        provider,
+        model,
+        attachments: attachments?.length || 0,
+      });
 
-      fetch(`${SERVER_URL}/api/chat`, {
-        method: 'POST',
+      // Use new /api/chats/:chatId/stream endpoint
+      fetch(`${SERVER_URL}/api/chats/${chatId}/stream`, {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json'
+          "Content-Type": "application/json",
         },
-        credentials: 'include',
-        body: JSON.stringify({ message, chatId, provider, model, workspaceId, userId }),
-        signal
+        credentials: "include",
+        body: JSON.stringify({
+          message,
+          provider,
+          model,
+          workspaceId,
+          attachments,
+        }),
+        signal,
       })
-        .then(response => {
+        .then((response) => {
           if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status} ${response.statusText}`);
+            // Try to parse error response
+            response
+              .json()
+              .then((errData) => {
+                reject(new Error(errData.error || `HTTP ${response.status}`));
+              })
+              .catch(() => {
+                reject(
+                  new Error(
+                    `HTTP error! status: ${response.status} ${response.statusText}`,
+                  ),
+                );
+              });
+            return;
           }
 
-          console.log('[PRELOAD] Connected to backend successfully');
+          console.log("[PRELOAD] Connected to Pi Agent successfully");
 
           // Return a custom object with methods to read the stream
           resolve({
-            getReader: async function() {
+            getReader: async function () {
               const reader = response.body!.getReader();
               const decoder = new TextDecoder();
               return {
@@ -424,29 +499,31 @@ contextBridge.exposeInMainWorld('electronAPI', {
                   try {
                     const { done, value } = await reader.read();
                     if (done) {
-                      console.log('[PRELOAD] Stream ended');
+                      console.log("[PRELOAD] Stream ended");
                     }
                     return {
                       done,
-                      value: done ? undefined : decoder.decode(value, { stream: true })
+                      value: done
+                        ? undefined
+                        : decoder.decode(value, { stream: true }),
                     };
                   } catch (readError) {
                     // Check if this is a user-initiated abort
-                    if ((readError as Error).name === 'AbortError') {
-                      console.log('[PRELOAD] Stream aborted by user');
+                    if ((readError as Error).name === "AbortError") {
+                      console.log("[PRELOAD] Stream aborted by user");
                       // Return done=true instead of throwing
                       return { done: true, value: undefined };
                     }
-                    console.error('[PRELOAD] Read error:', readError);
+                    console.error("[PRELOAD] Read error:", readError);
                     throw readError;
                   }
-                }
+                },
               };
-            }
+            },
           });
         })
-        .catch(error => {
-          console.error('[PRELOAD] Connection error:', error);
+        .catch((error) => {
+          console.error("[PRELOAD] Connection error:", error);
           reject(new Error(`Failed to connect to backend: ${error.message}`));
         });
     });
@@ -456,15 +533,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getProviders: async (): Promise<ProvidersResponse> => {
     try {
       const response = await fetch(`${SERVER_URL}/api/providers`, {
-        credentials: 'include'
+        credentials: "include",
       });
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       return await response.json();
     } catch (error) {
-      console.error('[PRELOAD] Error fetching providers:', error);
-      return { providers: ['claude'], default: 'claude' };
+      console.error("[PRELOAD] Error fetching providers:", error);
+      return { providers: ["claude"], default: "claude" };
     }
   },
 
@@ -472,20 +549,73 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openExternal: async (url: string): Promise<void> => {
     try {
       // Validate URL is http/https
-      if (!url.startsWith('http://') && !url.startsWith('https://')) {
-        console.error('[PRELOAD] Invalid URL for openExternal:', url);
+      if (!url.startsWith("http://") && !url.startsWith("https://")) {
+        console.error("[PRELOAD] Invalid URL for openExternal:", url);
         return;
       }
-      
+
       // Use Electron's shell API via IPC to main process
-      const result = await ipcRenderer.invoke('open-external', url);
+      const result = await ipcRenderer.invoke("open-external", url);
       if (!result?.success) {
-        console.error('[PRELOAD] Failed to open external URL:', result?.error);
+        console.error("[PRELOAD] Failed to open external URL:", result?.error);
       }
     } catch (error) {
-      console.error('[PRELOAD] Error calling openExternal:', error);
+      console.error("[PRELOAD] Error calling openExternal:", error);
       // Fallback to window.open
-      window.open(url, '_blank', 'noopener,noreferrer');
+      window.open(url, "_blank", "noopener,noreferrer");
     }
-  }
+  },
+
+  // ============================================
+  // FILE ATTACHMENT APIs
+  // ============================================
+
+  // Select files or folders
+  selectPaths: async (): Promise<{
+    success: boolean;
+    paths?: Array<{
+      path: string;
+      name: string;
+      isDirectory: boolean;
+      size: number;
+    }>;
+    error?: string;
+  }> => {
+    return await ipcRenderer.invoke("select-paths");
+  },
+
+  // Save attachments to disk
+  saveAttachments: async (
+    chatId: string,
+    files: Array<{ data: string; name: string; type: string; size: number }>,
+  ): Promise<{
+    success: boolean;
+    attachments?: Array<{
+      filename: string;
+      originalName: string;
+      mimeType: string;
+      size: number;
+      storagePath: string;
+    }>;
+    error?: string;
+  }> => {
+    return await ipcRenderer.invoke("save-attachments", chatId, files);
+  },
+
+  // Read attachment from disk
+  readAttachment: async (
+    storagePath: string,
+  ): Promise<{ data: string; mimeType: string }> => {
+    return await ipcRenderer.invoke("read-attachment", storagePath);
+  },
+
+  // Delete all attachments for a chat
+  deleteChatAttachments: async (chatId: string): Promise<void> => {
+    return await ipcRenderer.invoke("delete-chat-attachments", chatId);
+  },
+
+  // Open attachment with system default app
+  openAttachment: async (storagePath: string): Promise<void> => {
+    return await ipcRenderer.invoke("open-attachment", storagePath);
+  },
 });

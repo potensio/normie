@@ -1,0 +1,340 @@
+import {
+  codingTools,
+  readOnlyTools,
+  grepTool,
+  findTool,
+  lsTool,
+} from "@mariozechner/pi-coding-agent";
+import type { AgentTool } from "@mariozechner/pi-agent-core";
+import type { TSchema } from "@sinclair/typebox";
+import { webSearchTool, webFetchTool } from "./web-tools.js";
+import path from "path";
+
+/**
+ * Binary file extensions that should not be read as text
+ */
+const BINARY_EXTENSIONS = new Set([
+  // Images
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".gif",
+  ".bmp",
+  ".ico",
+  ".webp",
+  ".svg",
+  ".tiff",
+  ".tif",
+  // Videos
+  ".mp4",
+  ".avi",
+  ".mov",
+  ".wmv",
+  ".flv",
+  ".mkv",
+  ".webm",
+  ".m4v",
+  // Audio
+  ".mp3",
+  ".wav",
+  ".ogg",
+  ".flac",
+  ".aac",
+  ".wma",
+  ".m4a",
+  // Archives
+  ".zip",
+  ".rar",
+  ".7z",
+  ".tar",
+  ".gz",
+  ".bz2",
+  ".xz",
+  // Executables
+  ".exe",
+  ".dll",
+  ".so",
+  ".dylib",
+  ".app",
+  // Documents (binary formats)
+  ".pdf",
+  ".doc",
+  ".docx",
+  ".xls",
+  ".xlsx",
+  ".ppt",
+  ".pptx",
+  // Fonts
+  ".ttf",
+  ".otf",
+  ".woff",
+  ".woff2",
+  ".eot",
+  // Other
+  ".bin",
+  ".dat",
+  ".db",
+  ".sqlite",
+  ".dmg",
+  ".iso",
+]);
+
+/**
+ * Wrap the read tool to reject binary files
+ */
+function wrapReadTool(originalReadTool: AgentTool): AgentTool {
+  return {
+    ...originalReadTool,
+    execute: async (toolCallId: string, args: any, signal?: AbortSignal) => {
+      const filePath = args.path || args.file_path || "";
+      const ext = path.extname(filePath).toLowerCase();
+
+      if (BINARY_EXTENSIONS.has(ext)) {
+        console.log(`[ReadTool] Rejected binary file: ${filePath}`);
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Cannot read binary file: ${filePath}\n\nThis appears to be a ${ext} file. Binary files cannot be read as text. If you need information about this file, you can:\n- Check the file path and name for context\n- Use other tools to analyze the file\n- Ask the user about the file's purpose`,
+            },
+          ],
+          details: {
+            error: true,
+            reason: "binary_file",
+            extension: ext,
+          },
+        };
+      }
+
+      // Not a binary file, proceed with original read tool
+      return originalReadTool.execute(toolCallId, args, signal);
+    },
+  };
+}
+
+// Re-export for external use
+export { webSearchTool, webFetchTool } from "./web-tools.js";
+export {
+  codingTools,
+  readOnlyTools,
+  grepTool,
+  findTool,
+  lsTool,
+} from "@mariozechner/pi-coding-agent";
+
+/**
+ * Tool builder configuration options
+ */
+export interface ToolBuilderOptions {
+  /**
+   * Workspace ID for context
+   */
+  workspaceId: string;
+
+  /**
+   * User ID for context
+   */
+  userId: string;
+
+  /**
+   * Whether to include built-in coding tools (read, write, bash, edit, grep, find, ls)
+   * @default true
+   */
+  includeCodingTools?: boolean;
+
+  /**
+   * Whether to include read-only tools only (no write operations)
+   * @default false
+   */
+  readOnlyMode?: boolean;
+
+  /**
+   * Whether to include web tools (web_search, web_fetch)
+   * @default true
+   */
+  includeWebTools?: boolean;
+
+  /**
+   * Additional custom tools to include
+   */
+  customTools?: AgentTool[];
+}
+
+/**
+ * Build complete tool set for a workspace.
+ *
+ * Combines:
+ * - Pi's built-in coding tools (read, write, bash, edit, grep, find, ls)
+ * - Web tools (web_search, web_fetch)
+ * - Any additional custom tools
+ *
+ * @example
+ * ```typescript
+ * const tools = await buildWorkspaceTools({
+ *   workspaceId: 'ws-123',
+ *   userId: 'user-456',
+ * });
+ * ```
+ */
+export async function buildWorkspaceTools(
+  options: ToolBuilderOptions,
+): Promise<AgentTool[]> {
+  const {
+    workspaceId,
+    includeCodingTools = true,
+    readOnlyMode = false,
+    includeWebTools = true,
+    customTools = [],
+  } = options;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tools: AgentTool<any>[] = [];
+
+  // Add Pi's built-in coding tools
+  if (includeCodingTools) {
+    if (readOnlyMode) {
+      // Read-only mode: only include safe tools (wrap read tool)
+      const wrappedReadOnlyTools = readOnlyTools.map((tool) =>
+        tool.name === "read" ? wrapReadTool(tool) : tool,
+      );
+      tools.push(...wrappedReadOnlyTools);
+      console.log(
+        "[ToolSystem] Added readOnlyTools:",
+        readOnlyTools.map((t) => t.name).join(", "),
+      );
+    } else {
+      // Full mode: include all coding tools + additional read-only tools (wrap read tool)
+      const wrappedCodingTools = codingTools.map((tool) =>
+        tool.name === "read" ? wrapReadTool(tool) : tool,
+      );
+      tools.push(...wrappedCodingTools);
+      // Add grep, find, ls which are useful for code exploration
+      tools.push(grepTool, findTool, lsTool);
+      console.log(
+        "[ToolSystem] Added codingTools + grep, find, ls:",
+        [...codingTools.map((t) => t.name), "grep", "find", "ls"].join(", "),
+      );
+    }
+  }
+
+  // Add web tools
+  if (includeWebTools) {
+    // Cast through unknown to satisfy type checker for heterogeneous tool types
+    tools.push(webSearchTool as unknown as AgentTool<TSchema>);
+    tools.push(webFetchTool as unknown as AgentTool<TSchema>);
+  }
+
+  // Add any custom tools
+  if (customTools.length > 0) {
+    tools.push(...customTools);
+  }
+
+  console.log(
+    `[ToolSystem] Built ${tools.length} tools for workspace ${workspaceId}`,
+  );
+
+  return tools;
+}
+
+/**
+ * Build minimal tool set (read-only + web tools only)
+ *
+ * Useful for preview or sandboxed environments where write access
+ * should be restricted.
+ */
+export async function buildMinimalTools(
+  options: Omit<ToolBuilderOptions, "includeCodingTools" | "readOnlyMode">,
+): Promise<AgentTool[]> {
+  return buildWorkspaceTools({
+    ...options,
+    includeCodingTools: true,
+    readOnlyMode: true,
+  });
+}
+
+/**
+ * Get a tool by name from an array of tools
+ */
+export function getToolByName(
+  tools: AgentTool[],
+  name: string,
+): AgentTool | undefined {
+  return tools.find((tool) => tool.name === name);
+}
+
+/**
+ * Get all tool names from an array of tools
+ */
+export function getToolNames(tools: AgentTool[]): string[] {
+  return tools.map((tool) => tool.name);
+}
+
+/**
+ * Check if a tool exists in the array
+ */
+export function hasTool(tools: AgentTool[], name: string): boolean {
+  return tools.some((tool) => tool.name === name);
+}
+
+/**
+ * Filter tools by names (allowlist)
+ */
+export function filterTools(
+  tools: AgentTool[],
+  allowedNames: string[],
+): AgentTool[] {
+  const allowedSet = new Set(allowedNames);
+  return tools.filter((tool) => allowedSet.has(tool.name));
+}
+
+/**
+ * Exclude tools by names (blocklist)
+ */
+export function excludeTools(
+  tools: AgentTool[],
+  excludedNames: string[],
+): AgentTool[] {
+  const excludedSet = new Set(excludedNames);
+  return tools.filter((tool) => !excludedSet.has(tool.name));
+}
+
+/**
+ * Group tools by category for display purposes
+ */
+export function groupToolsByCategory(
+  tools: AgentTool[],
+): Record<string, AgentTool[]> {
+  const groups: Record<string, AgentTool[]> = {
+    "Built-in": [],
+    Web: [],
+    Integrations: [],
+  };
+
+  for (const tool of tools) {
+    // Categorize by name patterns
+    if (
+      ["read", "write", "edit", "bash", "grep", "find", "ls"].includes(
+        tool.name,
+      )
+    ) {
+      groups["Built-in"].push(tool);
+    } else if (tool.name.startsWith("web_")) {
+      groups["Web"].push(tool);
+    } else {
+      // Default to Integrations category for Composio tools
+      if (!groups["Integrations"]) {
+        groups["Integrations"] = [];
+      }
+      groups["Integrations"].push(tool);
+    }
+  }
+
+  // Remove empty groups
+  for (const key of Object.keys(groups)) {
+    if (groups[key].length === 0) {
+      delete groups[key];
+    }
+  }
+
+  return groups;
+}

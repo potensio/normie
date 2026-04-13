@@ -4,12 +4,6 @@
 
 This document specifies requirements for replacing Normie's custom provider abstraction layer with the Pi Agent SDK. The integration will eliminate approximately 1,200 lines of custom provider code while adding support for 15+ LLM providers, conversation branching, mid-conversation model switching, and crash-safe JSONL session storage. The Pi Agent SDK provides a production-proven architecture used by OpenClaw (160K+ stars) with built-in context compaction and unified streaming interfaces.
 
-**Out of Scope (Future Phases):**
-
-- Composio tool adapter (will be added in Phase 2)
-- Web tools integration (WebSearch, WebFetch - will be added in Phase 2)
-- Backward compatibility for existing chats (database can be reset for fresh start)
-
 ## Glossary
 
 - **Pi_Agent_SDK**: The @mariozechner/pi-agent-core package providing agent loop with tool execution
@@ -24,8 +18,9 @@ This document specifies requirements for replacing Normie's custom provider abst
 - **JSONL_Session**: Append-only JSON Lines file storing conversation history
 - **Context_Compaction**: Automatic message history reduction when approaching token limits
 - **Model_Switching**: Changing LLM provider/model mid-conversation without losing history
-
+- **Tool_Adapter**: Wrapper converting Composio actions to Pi Agent tool format
 - **Event_Translator**: Component mapping Pi Agent events to Normie's StreamChunk format
+- **Workspace_Isolation**: Per-workspace tool scoping using Composio entity IDs
 
 ## Requirements
 
@@ -53,6 +48,7 @@ This document specifies requirements for replacing Normie's custom provider abst
 4. THE System SHALL delete apps/server/src/providers/kimi-provider.ts
 5. THE System SHALL delete apps/server/src/providers/bedrock-provider.ts
 6. THE System SHALL remove in-memory session Map from provider implementations
+7. THE System SHALL preserve apps/server/src/providers/mcp-client.ts for Composio integration
 
 ### Requirement 3: Session Manager Wrapper
 
@@ -68,7 +64,32 @@ This document specifies requirements for replacing Normie's custom provider abst
 6. THE Session_Manager SHALL maintain conversation tree structure for branching support
 7. FOR ALL session operations, appending to JSONL then reading SHALL produce equivalent conversation history (round-trip property)
 
-### Requirement 4: Event Translation Layer
+### Requirement 4: Composio Tool Adapter
+
+**User Story:** As a user, I want Composio integrations to work with Pi Agent, so that workspace-isolated tools remain functional.
+
+#### Acceptance Criteria
+
+1. THE System SHALL create apps/server/src/pi/tools/composio-tools.ts module
+2. WHEN a workspace has Composio integrations, THE Tool_Adapter SHALL convert Composio actions to Pi Agent tool format
+3. WHEN a tool is invoked, THE Tool_Adapter SHALL use workspace-specific Entity_ID for isolation
+4. THE Tool_Adapter SHALL preserve Composio action schemas in Pi Agent tool definitions
+5. WHEN a Composio action executes, THE Tool_Adapter SHALL return results in Pi Agent tool result format
+6. IF a Composio action fails, THEN THE Tool_Adapter SHALL return error details in Pi Agent error format
+
+### Requirement 5: Web Tools Integration
+
+**User Story:** As a user, I want web search and fetch capabilities, so that the agent can access internet information.
+
+#### Acceptance Criteria
+
+1. THE System SHALL create apps/server/src/pi/tools/web-tools.ts module
+2. THE System SHALL implement WebSearch tool using Pi Agent tool interface
+3. THE System SHALL implement WebFetch tool using Pi Agent tool interface
+4. WHEN WebSearch is invoked, THE System SHALL return search results in structured format
+5. WHEN WebFetch is invoked, THE System SHALL return webpage content with metadata
+
+### Requirement 6: Event Translation Layer
 
 **User Story:** As a developer, I want Pi Agent events translated to StreamChunk format, so that the frontend requires minimal changes.
 
@@ -83,7 +104,7 @@ This document specifies requirements for replacing Normie's custom provider abst
 7. THE Event_Translator SHALL preserve provider name in all StreamChunk events
 8. THE Event_Translator SHALL preserve session_id in session_init StreamChunk events
 
-### Requirement 5: Multi-Provider Support
+### Requirement 7: Multi-Provider Support
 
 **User Story:** As a user, I want access to 15+ LLM providers, so that I can choose the best model for each task.
 
@@ -95,7 +116,7 @@ This document specifies requirements for replacing Normie's custom provider abst
 4. THE System SHALL maintain provider configuration in user preferences
 5. THE System SHALL support provider-specific model selection
 
-### Requirement 6: Model Switching API
+### Requirement 8: Model Switching API
 
 **User Story:** As a user, I want to switch models mid-conversation, so that I can use different models for different parts of the conversation.
 
@@ -108,7 +129,7 @@ This document specifies requirements for replacing Normie's custom provider abst
 5. WHEN the next message is sent, THE System SHALL use the new provider and model
 6. THE System SHALL record model switches in JSONL session metadata
 
-### Requirement 7: Conversation Branching API
+### Requirement 9: Conversation Branching API
 
 **User Story:** As a user, I want to branch conversations, so that I can explore alternative approaches without losing the original conversation.
 
@@ -121,7 +142,7 @@ This document specifies requirements for replacing Normie's custom provider abst
 5. WHEN a branch is created, THE System SHALL return the new chat ID
 6. THE System SHALL maintain parent-child relationship in chat metadata
 
-### Requirement 8: Session Tree API
+### Requirement 10: Session Tree API
 
 **User Story:** As a developer, I want to retrieve conversation tree structure, so that the frontend can display branch relationships.
 
@@ -133,7 +154,7 @@ This document specifies requirements for replacing Normie's custom provider abst
 4. THE System SHALL include chat metadata for each branch
 5. THE System SHALL order branches chronologically by creation time
 
-### Requirement 9: Database Schema Migration
+### Requirement 11: Database Schema Migration
 
 **User Story:** As a developer, I want simplified chat schema, so that Pi Agent manages session state internally.
 
@@ -146,7 +167,7 @@ This document specifies requirements for replacing Normie's custom provider abst
 5. THE System SHALL add sessionFilePath column to chats table for JSONL file location
 6. THE System SHALL create database migration using Drizzle ORM
 
-### Requirement 10: Crash-Safe Session Storage
+### Requirement 12: Crash-Safe Session Storage
 
 **User Story:** As a user, I want sessions to survive crashes, so that I never lose conversation history.
 
@@ -158,7 +179,7 @@ This document specifies requirements for replacing Normie's custom provider abst
 4. THE Session_Manager SHALL use atomic file operations for JSONL appends
 5. IF a JSONL file is corrupted, THEN THE Session_Manager SHALL load valid messages up to corruption point
 
-### Requirement 11: Context Compaction Integration
+### Requirement 13: Context Compaction Integration
 
 **User Story:** As a user, I want automatic context management, so that conversations don't fail when approaching token limits.
 
@@ -170,7 +191,18 @@ This document specifies requirements for replacing Normie's custom provider abst
 4. WHEN context is compacted, THE System SHALL record compaction event in JSONL session
 5. THE System SHALL configure token limit thresholds per provider
 
-### Requirement 12: Streaming Performance Parity
+### Requirement 14: Workspace Isolation Preservation
+
+**User Story:** As a user, I want workspace-scoped tools, so that actions only affect the intended workspace.
+
+#### Acceptance Criteria
+
+1. WHEN tools are loaded for a chat, THE System SHALL filter tools by workspace ID
+2. WHEN a Composio tool is invoked, THE System SHALL use Entity_ID for the chat's workspace
+3. THE System SHALL prevent cross-workspace tool access
+4. WHEN workspace integrations change, THE System SHALL reload available tools for that workspace
+
+### Requirement 15: Streaming Performance Parity
 
 **User Story:** As a user, I want streaming performance equal to or better than current implementation, so that the user experience is not degraded.
 
@@ -181,7 +213,7 @@ This document specifies requirements for replacing Normie's custom provider abst
 3. THE System SHALL measure and log streaming latency for performance monitoring
 4. THE System SHALL achieve first-token latency within 500ms of Legacy_Provider baseline
 
-### Requirement 13: Error Handling and Logging
+### Requirement 16: Error Handling and Logging
 
 **User Story:** As a developer, I want comprehensive error handling, so that issues can be diagnosed and resolved quickly.
 
@@ -194,7 +226,7 @@ This document specifies requirements for replacing Normie's custom provider abst
 5. THE System SHALL log all conversation branches with parent and child chat IDs
 6. THE System SHALL use consistent log prefix format: [PiAgent], [SessionManager], [ToolAdapter]
 
-### Requirement 14: Configuration Management
+### Requirement 17: Configuration Management
 
 **User Story:** As a developer, I want centralized Pi Agent configuration, so that settings are consistent and maintainable.
 
@@ -206,7 +238,7 @@ This document specifies requirements for replacing Normie's custom provider abst
 4. THE System SHALL validate configuration on server startup
 5. IF configuration is invalid, THEN THE System SHALL log error and prevent server startup
 
-### Requirement 15: Tool Registry Integration
+### Requirement 18: Tool Registry Integration
 
 **User Story:** As a developer, I want Pi Agent tools registered in Normie's tool registry, so that frontend displays correct tool icons.
 
@@ -217,14 +249,15 @@ This document specifies requirements for replacing Normie's custom provider abst
 3. THE System SHALL preserve existing tool icon mappings for Composio tools
 4. THE System SHALL expose tool metadata via GET /api/tools endpoint
 
-### Requirement 16: Testing and Validation
+### Requirement 19: Testing and Validation
 
 **User Story:** As a developer, I want integration tests, so that Pi Agent integration is verified to work correctly.
 
 #### Acceptance Criteria
 
 1. THE System SHALL provide integration test for session creation and message appending
-2. THE System SHALL provide integration test for event translation from Pi Agent to StreamChunk
-3. THE System SHALL provide integration test for model switching mid-conversation
-4. THE System SHALL provide integration test for conversation branching
-5. THE System SHALL provide integration test for JSONL session recovery after simulated crash
+2. THE System SHALL provide integration test for Composio tool adapter with workspace isolation
+3. THE System SHALL provide integration test for event translation from Pi Agent to StreamChunk
+4. THE System SHALL provide integration test for model switching mid-conversation
+5. THE System SHALL provide integration test for conversation branching
+6. THE System SHALL provide integration test for JSONL session recovery after simulated crash

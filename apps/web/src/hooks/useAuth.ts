@@ -87,6 +87,8 @@ export function useLogout() {
       setWorkspaces([]);
       setError(null);
       queryClient.clear();
+      // Navigation is handled by root route's auth guard
+      // which redirects to /auth when isLoggedIn becomes false
     },
     onError: (error: Error) => {
       console.error('[useLogout] Error:', error);
