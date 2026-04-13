@@ -189,6 +189,7 @@ function getAuthProviderId(piProvider: string): string {
     minimax: "minimax",
     zai: "zai",
     bedrock: "bedrock",
+    normie: "bedrock", // Normie AI uses Bedrock auth
   };
   return mapping[piProvider] || piProvider;
 }
@@ -315,7 +316,10 @@ export async function runPiQueryStream(
     }
 
     // Create AuthStorage
-    const authProvider = provider === "amazon-bedrock" ? "bedrock" : provider;
+    const authProvider =
+      provider === "amazon-bedrock" || provider === "normie"
+        ? "bedrock"
+        : provider;
     const authStorage = createAuthStorageWithCredentials(
       authProvider,
       credentials,
@@ -324,11 +328,26 @@ export async function runPiQueryStream(
     // Create ModelRegistry
     const modelRegistry = ModelRegistry.inMemory(authStorage);
 
-    // Register Bedrock if needed
-    if (provider === "bedrock" || provider === "amazon-bedrock") {
+    // Register Bedrock if needed (for bedrock, amazon-bedrock, or normie)
+    if (
+      provider === "bedrock" ||
+      provider === "amazon-bedrock" ||
+      provider === "normie"
+    ) {
+      // For Normie, use credentials from system_api_keys (via streamOptions)
+      // For Bedrock, use env vars (user's own AWS account)
+      const bedrockBaseUrl =
+        provider === "normie"
+          ? (credentials.streamOptions?.baseUrl as string) || process.env.BEDROCK_BASE_URL!
+          : process.env.BEDROCK_BASE_URL!;
+      const bedrockApiKey =
+        provider === "normie"
+          ? credentials.apiKey || process.env.BEDROCK_API_KEY!
+          : process.env.BEDROCK_API_KEY!;
+
       modelRegistry.registerProvider("bedrock", {
-        baseUrl: process.env.BEDROCK_BASE_URL!,
-        apiKey: process.env.BEDROCK_API_KEY!,
+        baseUrl: bedrockBaseUrl,
+        apiKey: bedrockApiKey,
         api: "openai-completions",
         authHeader: true,
         models: BEDROCK_MODELS,
@@ -337,7 +356,9 @@ export async function runPiQueryStream(
 
     // Get model
     const registryProvider =
-      provider === "amazon-bedrock" ? "bedrock" : provider;
+      provider === "amazon-bedrock" || provider === "normie"
+        ? "bedrock"
+        : provider;
     const piModel = modelRegistry.find(registryProvider, model);
     if (!piModel) {
       throw new Error(`Model '${registryProvider}/${model}' not found`);

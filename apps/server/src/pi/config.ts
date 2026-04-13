@@ -55,6 +55,7 @@ const PROVIDER_ENV_KEYS: Record<string, string[]> = {
 export const PROVIDER_ALIAS: Record<string, string> = {
   bedrock: "amazon-bedrock",
   azure: "azure-openai-responses",
+  normie: "amazon-bedrock", // Normie AI - powered by Bedrock
 };
 
 /**

@@ -2,11 +2,12 @@
  * Chat Route - /c/:chatId
  *
  * Displays a specific chat conversation.
- * The chatId parameter identifies which chat to load.
+ * Route acts as container - holds streaming state and passes to children.
  */
 import { createFileRoute } from "@tanstack/react-router";
-import { useCurrentChat } from "@/hooks";
-import { ChatInputContainer, MessageList } from "@/components/chat";
+import { useCurrentChat, useChatContext } from "@/hooks";
+import { MessageList } from "@/components/chat";
+import { ChatInputLogic } from "@/components/chat/ChatInputLogic";
 
 export const Route = createFileRoute("/c/$chatId")({
   component: ChatComponent,
@@ -21,10 +22,8 @@ export const Route = createFileRoute("/c/$chatId")({
 
 function ChatComponent() {
   const { chatId } = Route.useParams();
-
-  // Only fetch chat after a short delay to allow mutation to complete
-  // This prevents 404 errors in console for new chats
   const { data: chat, isLoading } = useCurrentChat(chatId);
+  const { isStreaming, startStream, stopStream } = useChatContext();
 
   const messages = chat?.messages || [];
 
@@ -40,12 +39,18 @@ function ChatComponent() {
       {/* Messages */}
       <MessageList
         messages={messages}
-        isStreaming={isLoading}
+        isStreaming={isStreaming}
         chatId={chatId}
       />
 
-      {/* Input */}
-      <ChatInputContainer variant="chat" />
+      {/* Input with logic */}
+      <ChatInputLogic
+        variant="chat"
+        chatId={chatId}
+        isStreaming={isStreaming}
+        startStream={startStream}
+        stopStream={stopStream}
+      />
     </div>
   );
 }

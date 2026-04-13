@@ -125,15 +125,40 @@ app.post("/api/abort", async (_req, res) => {
 // ============================================
 
 // Get available providers with their models
-app.get("/api/providers", (_req, res) => {
+app.get("/api/providers", async (_req, res) => {
   const config = loadPiConfig();
   const enabledProviderIds = config.enabledProviders;
   const allProviders = getProviders();
 
+  // Check if Normie is configured in system_api_keys
+  const { getSystemApiKey } = await import("./auth/api-keys.js");
+  const normieKey = await getSystemApiKey("normie");
+  const normieConfigured = !!(normieKey?.apiKey && normieKey?.baseUrl);
+
   // Build provider info for enabled providers only
-  const providers: PiProviderInfo[] = enabledProviderIds
+  const providers: PiProviderInfo[] = [];
+
+  // Add Normie AI first if configured in DB
+  if (normieConfigured) {
+    const { BEDROCK_MODELS } = await import("./pi/bedrock-models.js");
+    providers.push({
+      id: "normie",
+      name: "Normie AI",
+      models: BEDROCK_MODELS.map((m) => ({
+        id: m.id,
+        name: m.name,
+        provider: "normie",
+        contextWindow: m.contextWindow,
+        maxTokens: m.maxTokens,
+        reasoning: m.reasoning,
+      })),
+    });
+  }
+
+  // Add other enabled providers
+  enabledProviderIds
     .filter((providerId) => allProviders.includes(providerId as any))
-    .map((providerId) => {
+    .forEach((providerId) => {
       let models: PiModel[] = [];
 
       try {
@@ -165,11 +190,11 @@ app.get("/api/providers", (_req, res) => {
         .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
         .join(" ");
 
-      return {
+      providers.push({
         id: providerId,
         name,
         models,
-      };
+      });
     });
 
   res.json({

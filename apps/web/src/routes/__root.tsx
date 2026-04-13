@@ -8,6 +8,7 @@ import { createRootRoute, Outlet, useNavigate } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import { useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { ChatProvider } from "@/contexts/ChatContext";
 import { ChatSidebarContainer } from "@/components/chat";
 
 export const Route = createRootRoute({
@@ -53,19 +54,21 @@ function RootComponent() {
 
   // Logged in - show full app with sidebar
   return (
-    <div className="relative h-screen flex overflow-hidden bg-zinc-50">
-      {/* Persistent Sidebar */}
-      <ChatSidebarContainer />
+    <ChatProvider>
+      <div className="relative h-screen flex overflow-hidden bg-zinc-50">
+        {/* Persistent Sidebar */}
+        <ChatSidebarContainer />
 
-      {/* Routed Content */}
-      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-        <Outlet />
+        {/* Routed Content */}
+        <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+          <Outlet />
+        </div>
+
+        {/* Router DevTools (only in development) */}
+        {process.env.NODE_ENV === "development" && (
+          <TanStackRouterDevtools position="bottom-right" />
+        )}
       </div>
-
-      {/* Router DevTools (only in development) */}
-      {process.env.NODE_ENV === "development" && (
-        <TanStackRouterDevtools position="bottom-right" />
-      )}
-    </div>
+    </ChatProvider>
   );
 }

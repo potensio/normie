@@ -84,6 +84,27 @@ export const refreshTokens = pgTable(
 );
 
 // ============================================
+// SYSTEM API KEYS
+// ============================================
+// Keys owned by the system/owner, not per-user.
+// Used for built-in providers like Normie AI.
+export const systemApiKeys = pgTable(
+  "system_api_keys",
+  {
+    provider: varchar("provider", { length: 50 }).primaryKey(),
+    keyEncrypted: text("key_encrypted").notNull(),
+    keyPreview: varchar("key_preview", { length: 20 }),
+    baseUrl: text("base_url"), // Optional: for custom endpoints (e.g., Bedrock)
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+);
+
+// ============================================
 // USER API KEYS
 // ============================================
 export const userApiKeys = pgTable(

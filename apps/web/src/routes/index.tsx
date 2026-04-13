@@ -6,13 +6,16 @@
  */
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo } from "react";
-import { ChatInputContainer } from "@/components/chat";
+import { useChatContext } from "@/hooks";
+import { ChatInputLogic } from "@/components/chat/ChatInputLogic";
 
 export const Route = createFileRoute("/")({
   component: HomeComponent,
 });
 
 function HomeComponent() {
+  const { isStreaming, startStream, stopStream } = useChatContext();
+
   // Random tagline for home view
   const tagline = useMemo(() => {
     const taglines = [
@@ -42,7 +45,13 @@ function HomeComponent() {
           </p>
         </div>
       </div>
-      <ChatInputContainer variant="home" />
+      <ChatInputLogic
+        variant="home"
+        chatId={null}
+        isStreaming={isStreaming}
+        startStream={startStream}
+        stopStream={stopStream}
+      />
     </div>
   );
 }

@@ -8,6 +8,7 @@
 // Containers (what App uses)
 export { ChatSidebarContainer } from './ChatSidebarContainer';
 export { ChatInputContainer } from './ChatInputContainer';
+export { ChatInputLogic } from './ChatInputLogic';
 
 // Presentational (exported for testing)
 export { ChatSidebar } from './ChatSidebar';

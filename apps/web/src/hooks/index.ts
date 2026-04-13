@@ -13,6 +13,9 @@ export { useChats, useChatDelete } from "./useChats";
 export { useCurrentChat } from "./useCurrentChat";
 export { useChatStream } from "./useChatStream";
 
+// Chat Context (shared streaming state)
+export { useChatContext, ChatProvider } from "@/contexts/ChatContext";
+
 // UI
 export { useSmartScroll } from "./useSmartScroll";
 

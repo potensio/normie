@@ -2,6 +2,7 @@
  * MessageList - Renders chat messages with smart auto-scroll
  */
 import type { Message } from "@normie/types";
+import { Loader } from "lucide-react";
 import { MessageItem } from "./MessageItem";
 import { useSmartScroll } from "@/hooks";
 import { ScrollToBottomButton } from "./ScrollToBottomButton";
@@ -37,6 +38,12 @@ export function MessageList({ messages, isStreaming, chatId }: MessageListProps)
               }
             />
           ))}
+          {/* Streaming loader indicator */}
+          {isStreaming && (
+            <div className="py-2">
+              <Loader className="h-4 w-4 animate-spin text-muted-foreground" style={{ animationDuration: "0.5s" }} />
+            </div>
+          )}
           <div ref={bottomRef} />
         </div>
       </div>

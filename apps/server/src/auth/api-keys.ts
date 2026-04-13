@@ -143,3 +143,60 @@ export async function validateApiKey(
   const key = await getApiKey(userId, provider);
   return key !== null;
 }
+
+// ============================================
+// SYSTEM API KEYS
+// ============================================
+
+/**
+ * Get a system API key (owner-managed, not per-user)
+ * Used for built-in providers like Normie AI.
+ */
+export async function getSystemApiKey(provider: string): Promise<{
+  apiKey: string;
+  baseUrl?: string;
+} | null> {
+  const db = getDb();
+  const [result] = await db.select()
+    .from(schema.systemApiKeys)
+    .where(eq(schema.systemApiKeys.provider, provider));
+
+  if (!result) return null;
+  
+  return {
+    apiKey: decrypt(result.keyEncrypted),
+    baseUrl: result.baseUrl || undefined,
+  };
+}
+
+/**
+ * Save a system API key (owner-managed)
+ */
+export async function saveSystemApiKey(
+  provider: string,
+  apiKey: string,
+  baseUrl?: string
+): Promise<void> {
+  const encrypted = encrypt(apiKey);
+  const preview = '...' + apiKey.slice(-4);
+  
+  const db = getDb();
+  
+  // Upsert using Drizzle's insert ... on conflict
+  await db.insert(schema.systemApiKeys)
+    .values({ 
+      provider, 
+      keyEncrypted: encrypted, 
+      keyPreview: preview,
+      baseUrl: baseUrl || null,
+    })
+    .onConflictDoUpdate({
+      target: schema.systemApiKeys.provider,
+      set: {
+        keyEncrypted: encrypted,
+        keyPreview: preview,
+        baseUrl: baseUrl || null,
+        updatedAt: new Date(),
+      }
+    });
+}

@@ -27,7 +27,7 @@ export const chatApi = {
   /**
    * Get a single chat with messages
    */
-  get: async (chatId: string): Promise<ApiChat[]> => {
+  get: async (chatId: string): Promise<ApiChat> => {
     if (!window.authAPI) throw new Error("Auth API not available");
     return window.authAPI.getChat(chatId);
   },

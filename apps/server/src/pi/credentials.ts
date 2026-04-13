@@ -6,7 +6,7 @@
  * getApiKey callback and stream options.
  */
 
-import { getApiKey } from "../auth/api-keys.js";
+import { getApiKey, getSystemApiKey } from "../auth/api-keys.js";
 
 /**
  * Provider name aliases (normie -> Pi)
@@ -14,26 +14,7 @@ import { getApiKey } from "../auth/api-keys.js";
 export const PROVIDER_ALIAS: Record<string, string> = {
   bedrock: "amazon-bedrock",
   azure: "azure-openai-responses",
-};
-
-/**
- * Environment variable mapping for fallback
- */
-const ENV_KEY_MAP: Record<string, string> = {
-  anthropic: "ANTHROPIC_API_KEY",
-  openai: "OPENAI_API_KEY",
-  google: "GEMINI_API_KEY",
-  groq: "GROQ_API_KEY",
-  xai: "XAI_API_KEY",
-  mistral: "MISTRAL_API_KEY",
-  openrouter: "OPENROUTER_API_KEY",
-  cerebras: "CEREBRAS_API_KEY",
-  "kimi-coding": "KIMI_API_KEY",
-  opencode: "OPENCODE_API_KEY",
-  minimax: "MINIMAX_API_KEY",
-  zai: "ZAI_API_KEY",
-  "azure-openai-responses": "AZURE_OPENAI_API_KEY",
-  "amazon-bedrock": "AWS_ACCESS_KEY_ID", // Primary key for Bedrock check
+  normie: "amazon-bedrock", // Normie AI - powered by Bedrock
 };
 
 /**
@@ -68,11 +49,19 @@ const REVERSE_ALIAS: Record<string, string> = {
 };
 
 /**
+ * Check if provider uses owner-managed credentials (not user keys)
+ */
+function isOwnerManagedProvider(normalizedProvider: string): boolean {
+  return normalizedProvider === "amazon-bedrock" || normalizedProvider === "normie";
+}
+
+/**
  * Resolve credentials for a provider.
  *
  * Priority:
- * 1. User's stored API key from database
- * 2. Environment variable fallback
+ * 1. Normie AI → system_api_keys (owner-managed)
+ * 2. User's stored API key from database (user_api_keys)
+ * 3. NO FALLBACK (fail fast if not configured)
  *
  * IMPORTANT: This does NOT mutate process.env
  */
@@ -82,25 +71,37 @@ export async function resolveCredentials(
 ): Promise<ResolvedCredentials> {
   const normalizedProvider = normalizeProvider(provider);
 
-  // Get user's stored key
-  // The database uses short names (bedrock, azure), but Pi uses full names (amazon-bedrock, azure-openai-responses)
+  console.log(
+    `[Credentials] Lookup: provider=${provider}, normalized=${normalizedProvider}`,
+  );
+
+  // Normie AI uses system API keys (owner-managed, not per-user)
+  if (provider === "normie") {
+    return resolveNormieCredentials();
+  }
+
+  // Amazon Bedrock uses user's own env vars (they bring their own AWS account)
+  if (normalizedProvider === "amazon-bedrock") {
+    return resolveBedrockCredentials(null);
+  }
+
+  // Azure OpenAI has special handling
+  if (normalizedProvider === "azure-openai-responses") {
+    // Get user's stored key
+    const dbProvider = REVERSE_ALIAS[normalizedProvider] || provider;
+    const userKey = await getApiKey(userId, dbProvider);
+    return resolveAzureCredentials(userKey);
+  }
+
+  // Get user's stored key for other providers
   const dbProvider = REVERSE_ALIAS[normalizedProvider] || provider;
   const userKey = await getApiKey(userId, dbProvider);
 
   console.log(
-    `[Credentials] Lookup: provider=${provider}, normalized=${normalizedProvider}, dbProvider=${dbProvider}, found=${!!userKey}`,
+    `[Credentials] User key found: ${!!userKey}`,
   );
 
-  // Handle complex providers differently
-  if (normalizedProvider === "amazon-bedrock") {
-    return resolveBedrockCredentials(userKey);
-  }
-
-  if (normalizedProvider === "azure-openai-responses") {
-    return resolveAzureCredentials(userKey);
-  }
-
-  // Simple API key providers
+  // Simple API key providers - user must have their own key
   if (userKey) {
     return {
       configured: true,
@@ -109,17 +110,7 @@ export async function resolveCredentials(
     };
   }
 
-  // Fall back to environment variable
-  const envKey = ENV_KEY_MAP[normalizedProvider];
-  if (envKey && process.env[envKey]) {
-    return {
-      configured: true,
-      source: "env",
-      apiKey: process.env[envKey],
-    };
-  }
-
-  // No credentials available
+  // No credentials available - NO FALLBACK
   return {
     configured: false,
     source: "none",
@@ -128,26 +119,57 @@ export async function resolveCredentials(
 }
 
 /**
- * Resolve AWS Bedrock credentials.
+ * Resolve Normie AI credentials.
+ *
+ * Normie is a built-in provider powered by Bedrock.
+ * Credentials are stored in system_api_keys table (owner-managed).
+ */
+async function resolveNormieCredentials(): Promise<ResolvedCredentials> {
+  console.log("[NormieCredentials] Resolving credentials...");
+
+  const systemKey = await getSystemApiKey("normie");
+
+  if (systemKey?.apiKey && systemKey?.baseUrl) {
+    console.log("[NormieCredentials] Using system API key from database");
+    console.log(
+      `[NormieCredentials]   Base URL: ${systemKey.baseUrl}`,
+    );
+
+    return {
+      configured: true,
+      source: "user", // 'user' here means 'stored in DB' not 'per-user'
+      apiKey: systemKey.apiKey,
+      streamOptions: {
+        baseUrl: systemKey.baseUrl,
+      },
+    };
+  }
+
+  console.log("[NormieCredentials] No credentials found in system_api_keys");
+  return {
+    configured: false,
+    source: "none",
+    error:
+      "Normie AI is not configured. Add API key to system_api_keys table.",
+  };
+}
+
+/**
+ * Resolve AWS Bedrock credentials (user's own Bedrock account).
  *
  * Uses OpenAI-compatible API exclusively.
- *
- * Required environment variables:
- * - BEDROCK_API_KEY
- * - BEDROCK_BASE_URL
+ * User must provide their own BEDROCK_API_KEY and BEDROCK_BASE_URL.
+ * 
+ * NO FALLBACK - user must configure their own credentials.
  */
 async function resolveBedrockCredentials(
-  _storedKey: string | null, // Ignored - Bedrock is owner-managed only
+  _storedKey: string | null, // Ignored - Bedrock requires env vars
 ): Promise<ResolvedCredentials> {
   console.log("[BedrockCredentials] Resolving credentials...");
 
-  // Bedrock API Key (OpenAI-compatible API)
-  // This is the only supported mode for amazon-bedrock
+  // Bedrock requires environment variables (user's own AWS account)
   if (process.env.BEDROCK_API_KEY && process.env.BEDROCK_BASE_URL) {
-    console.log("[BedrockCredentials] Using OpenAI-compatible API");
-    console.log(
-      `[BedrockCredentials]   API Key: ***${process.env.BEDROCK_API_KEY.slice(-8)}`,
-    );
+    console.log("[BedrockCredentials] Using env credentials");
     console.log(
       `[BedrockCredentials]   Base URL: ${process.env.BEDROCK_BASE_URL}`,
     );
@@ -164,7 +186,7 @@ async function resolveBedrockCredentials(
     configured: false,
     source: "none",
     error:
-      "AWS Bedrock credentials not configured. Set BEDROCK_API_KEY and BEDROCK_BASE_URL.",
+      "Amazon Bedrock requires BEDROCK_API_KEY and BEDROCK_BASE_URL environment variables.",
   };
 }
 
